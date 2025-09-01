@@ -9,6 +9,12 @@ interface ContainerDao {
     @Query("SELECT * FROM containers WHERE status != 'DELETED' AND (:includeArchived OR status != 'ARCHIVED') ORDER BY CASE WHEN :order = 'NAME_ASC' THEN name END ASC, CASE WHEN :order = 'NAME_DESC' THEN name END DESC, CASE WHEN :order = 'CREATED_ASC' THEN createdAt END ASC, CASE WHEN :order = 'CREATED_DESC' THEN createdAt END DESC, id DESC")
     fun observe(includeArchived: Boolean, order: String): Flow<List<Container>>
 
+    @Query("SELECT * FROM containers WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): Container?
+
+    @Query("SELECT * FROM containers WHERE uuid = :uuid LIMIT 1")
+    suspend fun getByUuid(uuid: String): Container?
+
     @Insert
     suspend fun insert(container: Container): Long
 
