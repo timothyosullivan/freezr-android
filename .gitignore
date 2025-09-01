@@ -29,6 +29,8 @@ app/build/
 # Misc
 *.log
 *.lock
+.validated
+NEEDS_EMULATOR_CHECK
 
 # OS / Editor
 .idea/**/workspace.xml

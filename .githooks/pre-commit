@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Hard guard: ensure we only commit working, emulator-validated code.
+
+# Allow bypass with ALLOW_DIRTY_COMMIT=1 in env
+if [[ "${ALLOW_DIRTY_COMMIT:-}" == "1" ]]; then
+  echo "[pre-commit] Bypass enabled (ALLOW_DIRTY_COMMIT=1)."
+  exit 0
+fi
+
+# Require absence of NEEDS_EMULATOR_CHECK marker
+if [[ -f NEEDS_EMULATOR_CHECK ]]; then
+  echo "[pre-commit] Blocked: NEEDS_EMULATOR_CHECK marker present. Validate on emulator then remove it."
+  exit 1
+fi
+
+# Require presence of .validated marker
+if [[ ! -f .validated ]]; then
+  echo "[pre-commit] Blocked: .validated marker missing. Build & run on emulator, then: touch .validated"
+  exit 1
+fi
+
+# Quick incremental build check (skip tests for speed)
+if ! ./gradlew :app:assembleDebug -q; then
+  echo "[pre-commit] Blocked: assembleDebug failed. Fix build first." >&2
+  exit 1
+fi
+
+echo "[pre-commit] All checks passed. Proceeding with commit."
