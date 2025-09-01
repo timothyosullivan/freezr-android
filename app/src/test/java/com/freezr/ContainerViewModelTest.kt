@@ -25,6 +25,8 @@ class ContainerViewModelTest {
         private var nextId = 1L
         private val backing = MutableStateFlow<List<Container>>(emptyList())
         override fun observe(includeArchived: Boolean, order: String): Flow<List<Container>> = backing
+    override suspend fun getById(id: Long): Container? = backing.value.firstOrNull { it.id == id }
+    override suspend fun getByUuid(uuid: String): Container? = backing.value.firstOrNull { it.uuid == uuid }
         override suspend fun insert(container: Container): Long {
             val assigned = container.copy(id = nextId++)
             backing.value = backing.value + assigned
@@ -47,9 +49,13 @@ class ContainerViewModelTest {
         containerDao: FakeContainerDao = FakeContainerDao(),
         settingsDao: FakeSettingsDao = FakeSettingsDao()
     ): Triple<ContainerViewModel, FakeContainerDao, FakeSettingsDao> {
+        val scheduler = object : com.freezr.reminder.ReminderScheduler {
+            override fun schedule(containerId: Long, triggerAtMillis: Long) { /* no-op for unit test */ }
+        }
         val vm = ContainerViewModel(
             ContainerRepository(containerDao),
-            SettingsRepository(settingsDao)
+            SettingsRepository(settingsDao),
+            scheduler
         )
         return Triple(vm, containerDao, settingsDao)
     }

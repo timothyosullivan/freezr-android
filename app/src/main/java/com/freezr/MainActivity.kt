@@ -16,7 +16,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asImageBitmap
+import com.freezr.label.QrCodeGenerator
+import android.graphics.Bitmap
 import com.freezr.data.model.*
+import androidx.core.content.FileProvider
+import android.content.Intent
+import com.freezr.label.LabelPdfGenerator
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -30,6 +37,7 @@ fun FreezrApp(vm: ContainerViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
+    var labelTarget by remember { mutableStateOf<com.freezr.data.model.Container?>(null) }
     Scaffold(
         topBar = { TopBar(state, onSort = vm::setSort, onToggleArchived = { vm.setShowArchived(!state.showArchived) }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -48,9 +56,27 @@ fun FreezrApp(vm: ContainerViewModel) {
                         val res = snackbarHostState.showSnackbar("Deleted", actionLabel = "Undo")
                         if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete()
                     }
-                }
+                },
+                onLabel = { c -> labelTarget = c }
             )
             BuildFooter()
+        }
+        labelTarget?.let { c ->
+            AlertDialog(onDismissRequest = { labelTarget = null }, confirmButton = {
+                TextButton(onClick = { labelTarget = null }) { Text("Close") }
+            }, title = { Text("Label: ${c.name}") }, text = {
+                val matrix = remember(c.uuid) { QrCodeGenerator.matrix(c.uuid, 256) }
+                val bmp = remember(matrix) {
+                    Bitmap.createBitmap(matrix.size, matrix.size, Bitmap.Config.ARGB_8888).apply {
+                        for (y in 0 until matrix.size) for (x in 0 until matrix.size) {
+                            setPixel(x,y, if (matrix.get(x,y)) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
+                        }
+                    }
+                }
+                Column { Image(bmp.asImageBitmap(), contentDescription = "QR ${'$'}{c.name}")
+                    Text(c.uuid, style = MaterialTheme.typography.bodySmall)
+                }
+            })
         }
     }
 }
@@ -58,20 +84,74 @@ fun FreezrApp(vm: ContainerViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleArchived: () -> Unit) {
-    TopAppBar(title = { Text("Freezr") }, actions = {
-        SortMenu(current = state.sortOrder, onSelect = onSort)
-        FilterArchivedChip(show = state.showArchived, onToggle = onToggleArchived)
-    }, modifier = Modifier.testTag(UiTestTags.TopBar))
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var overflow by remember { mutableStateOf(false) }
+    TopAppBar(
+        title = { Text("Freezr") },
+        actions = {
+            SortMenu(current = state.sortOrder, onSelect = onSort)
+            FilterArchivedChip(show = state.showArchived, onToggle = onToggleArchived)
+            // Overflow menu for secondary actions to reduce crowding
+            Box {
+                TextButton(onClick = { overflow = true }) { Text("⋮") }
+                DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Icon(painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_print), contentDescription = null)
+                                Spacer(Modifier.width(8.dp)); Text("Print Labels")
+                            }
+                        },
+                        onClick = {
+                            overflow = false
+                            val labels = state.items.filter { it.status == Status.ACTIVE }.take(40).map { c ->
+                                LabelPdfGenerator.Label(title = c.name.ifBlank { c.uuid.take(6) }, uuid = c.uuid)
+                            }
+                            if (labels.isNotEmpty()) {
+                                val file = LabelPdfGenerator.generate(context, labels, "labels.pdf")
+                                val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/pdf"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Share labels PDF"))
+                            }
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Icon(painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_scan), contentDescription = null)
+                                Spacer(Modifier.width(8.dp)); Text("Scan Label")
+                            }
+                        },
+                        onClick = {
+                            overflow = false
+                            // TODO open scan screen
+                        }
+                    )
+                }
+            }
+        },
+        modifier = Modifier.testTag(UiTestTags.TopBar)
+    )
 }
 
 @Composable
 private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
+    fun label(so: SortOrder) = when(so) {
+        SortOrder.NAME_ASC -> "Name A→Z"
+        SortOrder.NAME_DESC -> "Name Z→A"
+        SortOrder.CREATED_ASC -> "Oldest"
+        SortOrder.CREATED_DESC -> "Newest"
+    }
     var expanded by remember { mutableStateOf(false) }
-    Box(Modifier.testTag(UiTestTags.SortMenuBox)) { 
-        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(UiTestTags.SortMenuButton)) { Text(current.name) }
+    Box(Modifier.testTag(UiTestTags.SortMenuBox)) {
+        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(UiTestTags.SortMenuButton)) { Text(label(current)) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             SortOrder.values().forEach { so ->
-                DropdownMenuItem(text = { Text(so.name) }, onClick = { onSelect(so); expanded = false }, modifier = Modifier.testTag("SortOption_${'$'}{so.name}"))
+                DropdownMenuItem(text = { Text(label(so)) }, onClick = { onSelect(so); expanded = false }, modifier = Modifier.testTag("SortOption_${'$'}{so.name}"))
             }
         }
     }
@@ -97,14 +177,19 @@ private fun AddFab(onAdd: (String) -> Unit) {
 }
 
 @Composable
-private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onActivate: (Long) -> Unit, onDelete: (Long) -> Unit) {
+private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onActivate: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(8.dp).testTag(UiTestTags.ContainerList)) {
         items(items, key = { it.id }) { c ->
             ElevatedCard(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("${'$'}{UiTestTags.ContainerCardPrefix}${'$'}{c.id}")) {
                 Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(c.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        val qtyLine = "Qty: ${c.quantity}"
+                        Text(qtyLine, style = MaterialTheme.typography.bodySmall)
+                        val reminder = c.reminderDays?.let { "Rem: ${it}d" } ?: "Rem: default"
+                        Text(reminder, style = MaterialTheme.typography.bodySmall)
                         Text(c.status.name, style = MaterialTheme.typography.labelSmall)
+                        Text(c.uuid.take(8), style = MaterialTheme.typography.labelSmall)
                     }
                     Row { 
                         when (c.status) {
@@ -113,6 +198,7 @@ private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onA
                             Status.DELETED -> {}
                             Status.USED -> {}
                         }
+                        TextButton(onClick = { onLabel(c) }) { Text("Label") }
                         TextButton(onClick = { onDelete(c.id) }, modifier = Modifier.testTag(UiTestTags.DeleteButton)) { Text("Delete") }
                     }
                 }

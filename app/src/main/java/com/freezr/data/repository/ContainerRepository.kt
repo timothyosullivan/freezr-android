@@ -15,4 +15,23 @@ class ContainerRepository(private val dao: ContainerDao) {
     suspend fun archive(id: Long) = dao.updateStatus(id, Status.ARCHIVED)
     suspend fun activate(id: Long) = dao.updateStatus(id, Status.ACTIVE)
     suspend fun softDelete(id: Long) = dao.updateStatus(id, Status.DELETED)
+    suspend fun reuse(id: Long, newName: String? = null): Long {
+        val existing = dao.getById(id)
+        return dao.insert(
+            if (existing != null) {
+                existing.copy(
+                    id = 0,
+                    name = newName ?: existing.name,
+                    frozenDate = System.currentTimeMillis(),
+                    createdAt = System.currentTimeMillis(),
+                    updatedAt = System.currentTimeMillis(),
+                    status = Status.ACTIVE
+                )
+            } else {
+                Container(name = newName ?: "Reused")
+            }
+        )
+    }
+
+    suspend fun findByUuid(uuid: String) = dao.getByUuid(uuid)
 }

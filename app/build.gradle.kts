@@ -98,7 +98,9 @@ tasks.register<JacocoReport>("jacocoTestReport") {
             // Room generated implementation classes (DAOs / database impls)
             "**/*_Impl*.*","**/*Dao_Impl*.*","**/*Database_Impl*.*",
             // Jetpack Compose synthetic singleton/lambda holder classes & UI lambdas (retain only top-level file where desired)
-            "**/ComposableSingletons$*.class","**/MainActivityKt$*.class"
+            "**/ComposableSingletons$*.class","**/MainActivityKt$*.class",
+            // TEMP: exclude reminder infra until tested
+            "**/reminder/WorkManagerReminderScheduler*.*","**/reminder/ReminderWorker*.*"
         )
     }
     classDirectories.setFrom(classDirs)

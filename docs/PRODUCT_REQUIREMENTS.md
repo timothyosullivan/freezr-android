@@ -108,4 +108,43 @@ Family sharing, sync/cloud backup, nutritional tags, templates, OCR/photo thumbs
 
 ---
 Change Log:
-- 2025-09-01: Initial capture from user-provided PRS.
+- 2025-09-01 (later): Added Section 13 with current implementation snapshot (schema v3 with Long id + uuid, basic list/add/archive/delete, single QR label dialog, PDF label generator utility stub, reuse() backend clone, reminder scheduler scaffold). Original PRS retained as target scope.
+
+## 13. Current Implementation Snapshot (2025-09-01)
+This section is descriptive of the codebase as of branch `feat/schema-v2-container-fields`; it is NOT altering MVP goals, only recording divergence / progress.
+
+Implemented:
+- Data model: Room `Container` uses auto-increment Long `id` (PK) plus separate `uuid` (unique) instead of UUID-as-PK. Status values currently: ACTIVE, ARCHIVED, DELETED, USED (ARCHIVED & DELETED are transitional; PRS MVP mentions only ACTIVE|USED).
+- Added fields: `frozenDate`, `reminderDays` (per-item override), `quantity`, `notes`, timestamps, `status`, `uuid` (migrations 1→2→3 complete, backfilled uuid values).
+- List UI: Sorting (NAME_ASC/DESC, CREATED_ASC/DESC) & archived filter toggle; quantity, reminder info, short uuid displayed.
+- Add flow: Simple dialog (name only) → creates ACTIVE container with generated uuid; schedules reminder via scheduler abstraction (logic placeholder).
+- Archive / Activate / Soft delete (status=DELETED) with snackbar undo for delete.
+- Label: Per-item dialog shows QR (uuid payload currently raw uuid string, not URI scheme yet) and full uuid text.
+- QR generation: Pure matrix utility (ZXing-free internal) producing bitmap in UI layer; JVM tests for matrix.
+- PDF label generation: `LabelPdfGenerator` utility creates single A4 (595x842 @72dpi) sheet (4 cols × 10 rows) of QR codes (currently not multi-page and not wired to UI button yet).
+- Reuse backend: `reuse(id, newName?)` clones an existing container (resets timestamps, status ACTIVE, updates frozenDate) via repository; no UI trigger yet.
+- Camera permission added preparing for scanning feature.
+- Coverage: Custom JaCoCo baseline enforcement (current line ≈55%).
+
+Partial / Pending relative to PRS:
+- Printing: Top bar "Print" button placeholder only; needs intent integration & multi-page/preset logic.
+- Scanning: No CameraX/ML Kit implementation yet; no URI scheme `freezr://v1/c/<uuid>` encoded (currently raw uuid in QR).
+- Reminder notifications: Scheduling abstraction exists; no real notification delivery or POST_NOTIFICATIONS handling.
+- Status lifecycle: ARCHIVED & DELETED present but MVP desired USED path not wired; mark-used action absent.
+- Settings: Default reminder days present in data model; broader settings (label presets, theme, backup) not implemented.
+- Security/Privacy & Backup: Not started.
+- Accessibility polish, performance targets, printing presets, history view, snooze actions: Not implemented.
+
+Known Divergences from PRS (to reconcile):
+- PK type (Long + uuid field) vs PRS UUID primary key: evaluate whether to migrate to UUID PK or retain composite model.
+- Additional statuses (ARCHIVED, DELETED) extend lifecycle; decision needed whether to consolidate into ACTIVE/USED for MVP or document multi-state model.
+- QR payload should shift to URI scheme before scan feature lands for forward compatibility.
+
+Next Alignment Steps:
+1. Implement Print flow (multi-page + Android Print Framework + share PDF) and adopt URI payload format.
+2. Implement Scan flow (CameraX analyzer decoding QR → uuid) and reuse/create decision UI; optionally mark previous instance USED upon reuse (policy decision pending).
+3. Flesh out reminder worker with notifications + permission handling (Android 13+).
+4. Decide on PK migration or keep current model; update PRS if sticking with Long id.
+5. Introduce Settings persistence for default reminder days & future label presets.
+
+This snapshot section can be removed once implementation converges with PRS or moved to a separate CHANGELOG.
