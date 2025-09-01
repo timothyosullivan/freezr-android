@@ -1,0 +1,49 @@
+# Android / Kotlin / Gradle
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Generated
+app/build/
+**/build/
+
+# Gradle wrapper (keep wrapper dir + scripts)
+!gradle/wrapper/
+!gradlew
+!gradlew.bat
+
+# Exclude downloaded / bundled Gradle distributions accidentally added
+/gradle-*-bin.zip
+/gradle-[0-9]*/
+
+# Misc
+*.log
+*.lock
+
+# OS / Editor
+.idea/**/workspace.xml
+.idea/**/tasks.xml
+.idea/**/gradle.xml
+.idea/**/libraries
+.idea/**/caches
+.idea/**/modules.xml
+.idea/**/navEditor.xml
+.idea/**/assetWizardSettings.xml
+.idea/**/usage.statistics.xml
+.idea/**/dictionaries
+.idea/**/shelf
+.idea/**/compiler.xml
+.idea/**/jarRepositories.xml
+.idea/**/misc.xml
+.idea/**/codeStyles
+.vscode/
