@@ -12,6 +12,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -36,7 +37,7 @@ fun FreezrApp(vm: ContainerViewModel) {
             AddFab { name -> vm.add(name) }
         }
     ) { padding ->
-        Column(Modifier.padding(padding)) {
+    Column(Modifier.padding(padding).testTag(UiTestTags.RootColumn)) {
             ContainerList(
                 items = state.items,
                 onArchive = vm::archive,
@@ -60,17 +61,17 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
     TopAppBar(title = { Text("Freezr") }, actions = {
         SortMenu(current = state.sortOrder, onSelect = onSort)
         FilterArchivedChip(show = state.showArchived, onToggle = onToggleArchived)
-    })
+    }, modifier = Modifier.testTag(UiTestTags.TopBar))
 }
 
 @Composable
 private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-    Box { 
-        TextButton(onClick = { expanded = true }) { Text(current.name) }
+    Box(Modifier.testTag(UiTestTags.SortMenuBox)) { 
+        TextButton(onClick = { expanded = true }, modifier = Modifier.testTag(UiTestTags.SortMenuButton)) { Text(current.name) }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             SortOrder.values().forEach { so ->
-                DropdownMenuItem(text = { Text(so.name) }, onClick = { onSelect(so); expanded = false })
+                DropdownMenuItem(text = { Text(so.name) }, onClick = { onSelect(so); expanded = false }, modifier = Modifier.testTag("SortOption_${'$'}{so.name}"))
             }
         }
     }
@@ -78,7 +79,7 @@ private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
 
 @Composable
 private fun FilterArchivedChip(show: Boolean, onToggle: () -> Unit) {
-    AssistChip(onClick = onToggle, label = { Text(if (show) "Archived On" else "Archived Off") })
+    AssistChip(onClick = onToggle, label = { Text(if (show) "Archived On" else "Archived Off") }, modifier = Modifier.testTag(UiTestTags.FilterArchivedChip))
 }
 
 @Composable
@@ -87,19 +88,19 @@ private fun AddFab(onAdd: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
     if (open) {
         AlertDialog(onDismissRequest = { open = false }, confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = { onAdd(text.trim()); text = ""; open = false }) { Text("Add") }
+            TextButton(enabled = text.isNotBlank(), onClick = { onAdd(text.trim()); text = ""; open = false }, modifier = Modifier.testTag(UiTestTags.AddDialogConfirm)) { Text("Add") }
         }, dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } }, title = { Text("New Container") }, text = {
-            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Name") })
+            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Name") }, modifier = Modifier.testTag(UiTestTags.AddDialogTextField))
         })
     }
-    FloatingActionButton(onClick = { open = true }) { Text("Add") }
+    FloatingActionButton(onClick = { open = true }, modifier = Modifier.testTag(UiTestTags.FabAdd)) { Text("Add") }
 }
 
 @Composable
 private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onActivate: (Long) -> Unit, onDelete: (Long) -> Unit) {
-    LazyColumn(Modifier.fillMaxSize().padding(8.dp)) {
+    LazyColumn(Modifier.fillMaxSize().padding(8.dp).testTag(UiTestTags.ContainerList)) {
         items(items, key = { it.id }) { c ->
-            ElevatedCard(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+            ElevatedCard(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("${'$'}{UiTestTags.ContainerCardPrefix}${'$'}{c.id}")) {
                 Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(c.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -107,11 +108,11 @@ private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onA
                     }
                     Row { 
                         when (c.status) {
-                            Status.ACTIVE -> TextButton(onClick = { onArchive(c.id) }) { Text("Archive") }
-                            Status.ARCHIVED -> TextButton(onClick = { onActivate(c.id) }) { Text("Activate") }
+                            Status.ACTIVE -> TextButton(onClick = { onArchive(c.id) }, modifier = Modifier.testTag(UiTestTags.ArchiveButton)) { Text("Archive") }
+                            Status.ARCHIVED -> TextButton(onClick = { onActivate(c.id) }, modifier = Modifier.testTag(UiTestTags.ActivateButton)) { Text("Activate") }
                             Status.DELETED -> {}
                         }
-                        TextButton(onClick = { onDelete(c.id) }) { Text("Delete") }
+                        TextButton(onClick = { onDelete(c.id) }, modifier = Modifier.testTag(UiTestTags.DeleteButton)) { Text("Delete") }
                     }
                 }
             }
