@@ -76,8 +76,8 @@ class ContainerViewModel @Inject constructor(
     fun reuseFromScan(newName: String?) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing ?: return@launch
-        val id = containers.reuse(existing.id, newName ?: existing.name)
-        scheduleReminder(id, null)
+        val id = containers.reusePreserveUuid(existing.id, newName)
+        if (id > 0) scheduleReminder(id, null)
         _scanDialog.value = null
     }
 

@@ -106,7 +106,7 @@ fun FreezrApp(vm: ContainerViewModel) {
                     } else {
                         TextButton(onClick = {
                             vm.reuseFromScan(name.takeIf { it.isNotBlank() })
-                            scope.launch { snackbarHostState.showSnackbar("Reused from scan") }
+                            scope.launch { snackbarHostState.showSnackbar("Reused: old archived") }
                         }) { Text("Reuse") }
                     }
                 },
