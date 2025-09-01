@@ -24,6 +24,7 @@ import com.freezr.data.model.*
 import androidx.core.content.FileProvider
 import android.content.Intent
 import com.freezr.label.LabelPdfGenerator
+import com.freezr.label.QR_PREFIX
 import androidx.camera.view.PreviewView
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -83,7 +84,7 @@ fun FreezrApp(vm: ContainerViewModel) {
             AlertDialog(onDismissRequest = { labelTarget = null }, confirmButton = {
                 TextButton(onClick = { labelTarget = null }) { Text("Close") }
             }, title = { Text("Label: ${c.name}") }, text = {
-                val matrix = remember(c.uuid) { QrCodeGenerator.matrix(c.uuid, 256) }
+                val matrix = remember(c.uuid) { QrCodeGenerator.matrix(QR_PREFIX + c.uuid, 256) }
                 val bmp = remember(matrix) {
                     Bitmap.createBitmap(matrix.size, matrix.size, Bitmap.Config.ARGB_8888).apply {
                         for (y in 0 until matrix.size) for (x in 0 until matrix.size) {
@@ -199,7 +200,10 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                         scanner.process(image)
                             .addOnSuccessListener { list ->
                                 list.firstOrNull { it.format == Barcode.FORMAT_QR_CODE }?.rawValue?.let { value ->
-                                    if (detected == null) detected = value
+                                    if (value.startsWith(QR_PREFIX) && detected == null) {
+                                        val uuid = value.removePrefix(QR_PREFIX)
+                                        detected = uuid
+                                    }
                                 }
                             }
                             .addOnCompleteListener { imageProxy.close() }
@@ -212,9 +216,10 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
             }, executor)
             previewView
         }, modifier = Modifier.fillMaxSize())
-    Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+        Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onClose) { Text("Close") }
+                TextButton(onClick = { if (detected == null) detected = "TEST-UUID-INJECT" }) { Text("Inject Test QR") }
             }
         }
     }

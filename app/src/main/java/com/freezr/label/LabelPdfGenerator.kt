@@ -26,7 +26,8 @@ object LabelPdfGenerator {
             val row = idx / cols
             val left = col * cellW + (cellW - size)/2
             val top = row * cellH + 8
-            val matrix = QrCodeGenerator.matrix(l.uuid, size)
+            val payload = QR_PREFIX + l.uuid
+            val matrix = QrCodeGenerator.matrix(payload, size)
             val bmp = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
             for (y in 0 until size) for (x in 0 until size) {
                 val on = matrix.get(x * matrix.size / size, y * matrix.size / size)
