@@ -24,6 +24,15 @@ import com.freezr.data.model.*
 import androidx.core.content.FileProvider
 import android.content.Intent
 import com.freezr.label.LabelPdfGenerator
+import androidx.camera.view.PreviewView
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.barcode.common.Barcode
+import java.util.concurrent.Executors
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.Alignment
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -36,16 +45,24 @@ fun FreezrApp(vm: ContainerViewModel) {
     val state by vm.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var showScan by remember { mutableStateOf(false) }
 
     var labelTarget by remember { mutableStateOf<com.freezr.data.model.Container?>(null) }
     Scaffold(
-        topBar = { TopBar(state, onSort = vm::setSort, onToggleArchived = { vm.setShowArchived(!state.showArchived) }) },
+        topBar = { TopBar(state, onSort = vm::setSort, onToggleArchived = { vm.setShowArchived(!state.showArchived) }, onScan = { showScan = true }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             AddFab { name -> vm.add(name) }
         }
     ) { padding ->
     Column(Modifier.padding(padding).testTag(UiTestTags.RootColumn)) {
+            if (showScan) {
+                ScanScreen(onClose = { showScan = false }, onResult = { uuid ->
+                    showScan = false
+                    scope.launch { snackbarHostState.showSnackbar("Scanned $uuid") }
+                    // TODO integrate reuse/create flow
+                })
+            } else {
             ContainerList(
                 items = state.items,
                 onArchive = vm::archive,
@@ -59,6 +76,7 @@ fun FreezrApp(vm: ContainerViewModel) {
                 },
                 onLabel = { c -> labelTarget = c }
             )
+            }
             BuildFooter()
         }
         labelTarget?.let { c ->
@@ -83,7 +101,7 @@ fun FreezrApp(vm: ContainerViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleArchived: () -> Unit) {
+private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleArchived: () -> Unit, onScan: () -> Unit) {
     val context = androidx.compose.ui.platform.LocalContext.current
     var overflow by remember { mutableStateOf(false) }
     TopAppBar(
@@ -119,7 +137,7 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
                             }
                         }
                     )
-                    DropdownMenuItem(
+            DropdownMenuItem(
                         text = {
                             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                 Icon(painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_scan), contentDescription = null)
@@ -128,7 +146,7 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
                         },
                         onClick = {
                             overflow = false
-                            // TODO open scan screen
+                onScan()
                         }
                     )
                 }
@@ -152,6 +170,51 @@ private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             SortOrder.values().forEach { so ->
                 DropdownMenuItem(text = { Text(label(so)) }, onClick = { onSelect(so); expanded = false }, modifier = Modifier.testTag("SortOption_${'$'}{so.name}"))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    var detected by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(detected) { detected?.let { onResult(it) } }
+    Box(Modifier.fillMaxSize()) {
+    AndroidView(factory = { ctx: android.content.Context ->
+            val previewView = PreviewView(ctx)
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+            val executor = Executors.newSingleThreadExecutor()
+            cameraProviderFuture.addListener({
+                val provider = cameraProviderFuture.get()
+                val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
+                val analyzer = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
+                val scanner = BarcodeScanning.getClient()
+                analyzer.setAnalyzer(executor) { imageProxy ->
+                    val mediaImage = imageProxy.image
+                    if (mediaImage != null) {
+                        val rotation = imageProxy.imageInfo.rotationDegrees
+                        val image = InputImage.fromMediaImage(mediaImage, rotation)
+                        scanner.process(image)
+                            .addOnSuccessListener { list ->
+                                list.firstOrNull { it.format == Barcode.FORMAT_QR_CODE }?.rawValue?.let { value ->
+                                    if (detected == null) detected = value
+                                }
+                            }
+                            .addOnCompleteListener { imageProxy.close() }
+                    } else imageProxy.close()
+                }
+                try {
+                    provider.unbindAll()
+                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analyzer)
+                } catch (_: Exception) { }
+            }, executor)
+            previewView
+        }, modifier = Modifier.fillMaxSize())
+    Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onClose) { Text("Close") }
             }
         }
     }
