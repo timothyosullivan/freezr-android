@@ -10,7 +10,8 @@ class ContainerRepository(private val dao: ContainerDao) {
     fun observe(showArchived: Boolean, sortOrder: SortOrder): Flow<List<Container>> =
         dao.observe(showArchived, sortOrder.name)
 
-    suspend fun add(name: String) = dao.insert(Container(name = name))
+    suspend fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) =
+        dao.insert(Container(name = name, quantity = quantity, reminderDays = reminderDays))
     suspend fun archive(id: Long) = dao.updateStatus(id, Status.ARCHIVED)
     suspend fun activate(id: Long) = dao.updateStatus(id, Status.ACTIVE)
     suspend fun softDelete(id: Long) = dao.updateStatus(id, Status.DELETED)

@@ -111,6 +111,7 @@ private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onA
                             Status.ACTIVE -> TextButton(onClick = { onArchive(c.id) }, modifier = Modifier.testTag(UiTestTags.ArchiveButton)) { Text("Archive") }
                             Status.ARCHIVED -> TextButton(onClick = { onActivate(c.id) }, modifier = Modifier.testTag(UiTestTags.ActivateButton)) { Text("Activate") }
                             Status.DELETED -> {}
+                            Status.USED -> {}
                         }
                         TextButton(onClick = { onDelete(c.id) }, modifier = Modifier.testTag(UiTestTags.DeleteButton)) { Text("Delete") }
                     }

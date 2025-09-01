@@ -6,11 +6,13 @@ import com.freezr.data.repository.ContainerRepository
 import com.freezr.data.repository.SettingsRepository
 import com.freezr.data.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class ContainerViewModel @Inject constructor(
     private val containers: ContainerRepository,
     private val settingsRepo: SettingsRepository
@@ -33,7 +35,9 @@ class ContainerViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ContainerUiState())
 
-    fun add(name: String) = viewModelScope.launch { containers.add(name) }
+    fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) = viewModelScope.launch {
+        containers.add(name = name, quantity = quantity, reminderDays = reminderDays)
+    }
     fun archive(id: Long) = viewModelScope.launch { containers.archive(id) }
     fun activate(id: Long) = viewModelScope.launch { containers.activate(id) }
     fun softDelete(id: Long) = viewModelScope.launch {

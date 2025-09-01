@@ -17,7 +17,10 @@ object AppModule {
     @Provides @Singleton
     fun provideDb(app: Application): AppDatabase = Room.databaseBuilder(
         app, AppDatabase::class.java, "freezr.db"
-    ).fallbackToDestructiveMigration().build()
+    )
+        .addMigrations(AppDatabase.MIGRATION_1_2)
+        .fallbackToDestructiveMigrationOnDowngrade()
+        .build()
 
     @Provides fun containerDao(db: AppDatabase) = db.containerDao()
     @Provides fun settingsDao(db: AppDatabase) = db.settingsDao()
