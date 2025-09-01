@@ -23,10 +23,24 @@ Run:
 ```
 chmod +x .githooks/pre-commit
 git config core.hooksPath .githooks
+chmod +x tools/validate.sh
 ```
 Then after validating on emulator: `touch .validated` before committing. Remove `.validated` (`rm .validated`) when beginning new work.
 
 ### Markers
 - Create `NEEDS_EMULATOR_CHECK` when starting risky work. Delete it after validation.
 - `.validated` is ignored by Git and signals last validation success.
+
+## Validation Script
+Use `tools/validate.sh` to automate build + install + launch.
+
+Run without marking:
+```
+tools/validate.sh
+```
+
+Run and mark validated (writes `.validated` and removes `NEEDS_EMULATOR_CHECK`):
+```
+tools/validate.sh --mark
+```
 
