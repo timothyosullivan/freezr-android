@@ -31,6 +31,8 @@ app/build/
 *.lock
 .validated
 NEEDS_EMULATOR_CHECK
+# Ignore accidental backup source directories
+**/java_old_*/
 
 # OS / Editor
 .idea/**/workspace.xml
