@@ -2,6 +2,11 @@
 
 Minimal rebuilt version with Room, Hilt, Jetpack Compose list (add/archive/delete/undo, sort, archived toggle).
 
+## Documentation
+- Product Requirements: `docs/PRODUCT_REQUIREMENTS.md`
+- Collaboration / AI Pairing Prompt: `docs/COLLAB_PROMPT.md`
+- Engineering Backlog: `docs/BACKLOG.md`
+
 ## Commit Policy
 Only commit after emulator validation of the change.
 

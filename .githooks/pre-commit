@@ -20,10 +20,19 @@ if [[ ! -f .validated ]]; then
   exit 1
 fi
 
-# Quick incremental build check (skip tests for speed)
-if ! ./gradlew :app:assembleDebug -q; then
-  echo "[pre-commit] Blocked: assembleDebug failed. Fix build first." >&2
+# Build + unit tests + coverage check
+echo "[pre-commit] Running build + unit tests + coverage"
+if ! ./gradlew :app:assembleDebug testDebugUnitTest jacocoTestReport jacocoCoverageCheck -q; then
+  echo "[pre-commit] Blocked: build/tests/coverage failed." >&2
   exit 1
 fi
+
+# Verify coverage report exists
+REPORT_PATH="app/build/reports/jacoco/jacocoTestReport/html/index.html"
+if [[ ! -f "$REPORT_PATH" ]]; then
+  echo "[pre-commit] Blocked: Coverage report missing at $REPORT_PATH" >&2
+  exit 1
+fi
+echo "[pre-commit] Coverage report: $REPORT_PATH"
 
 echo "[pre-commit] All checks passed. Proceeding with commit."

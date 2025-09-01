@@ -15,19 +15,23 @@ class ContainerViewModel @Inject constructor(
     private val containers: ContainerRepository,
     private val settingsRepo: SettingsRepository
 ) : ViewModel() {
-    private val sortOrder = MutableStateFlow(SortOrder.CREATED_DESC)
-    private val showArchived = MutableStateFlow(false)
     private val lastDeleted = MutableStateFlow<Container?>(null)
 
-    val state: StateFlow<ContainerUiState> = combine(
-        sortOrder, showArchived,
-        settingsRepo.settings,
-        ::Triple
-    ).flatMapLatest { (sort, show, settings) ->
-        containers.observe(show, sort).map { list ->
-            ContainerUiState(list, sort, show)
+    // Source of truth: persisted settings
+    private val settings: StateFlow<Settings> = settingsRepo.settings
+        .stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
+
+    val state: StateFlow<ContainerUiState> = settings
+        .flatMapLatest { s ->
+            containers.observe(s.showArchived, s.sortOrder).map { list ->
+                ContainerUiState(
+                    items = list,
+                    sortOrder = s.sortOrder,
+                    showArchived = s.showArchived
+                )
+            }
         }
-    }.stateIn(viewModelScope, SharingStarted.Eagerly, ContainerUiState())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, ContainerUiState())
 
     fun add(name: String) = viewModelScope.launch { containers.add(name) }
     fun archive(id: Long) = viewModelScope.launch { containers.archive(id) }
@@ -39,8 +43,14 @@ class ContainerViewModel @Inject constructor(
     fun undoLastDelete() = viewModelScope.launch {
         lastDeleted.getAndUpdate { null }?.let { containers.add(it.name) }
     }
-    fun setSort(sort: SortOrder) { sortOrder.value = sort }
-    fun setShowArchived(show: Boolean) { showArchived.value = show }
+    fun setSort(sort: SortOrder) = viewModelScope.launch {
+        val current = settings.value
+        if (current.sortOrder != sort) settingsRepo.updateSort(sort, current)
+    }
+    fun setShowArchived(show: Boolean) = viewModelScope.launch {
+        val current = settings.value
+        if (current.showArchived != show) settingsRepo.updateShowArchived(show, current)
+    }
 }
 
 data class ContainerUiState(
