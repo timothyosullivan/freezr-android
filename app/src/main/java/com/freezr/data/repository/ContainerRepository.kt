@@ -12,6 +12,14 @@ class ContainerRepository(private val dao: ContainerDao) {
 
     suspend fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) =
         dao.insert(Container(name = name, quantity = quantity, reminderDays = reminderDays))
+    suspend fun addFromScan(uuid: String, name: String = "Scanned", quantity: Int = 1): Long {
+        val existing = dao.getByUuid(uuid)
+        if (existing != null) return existing.id
+        // Need to construct then replace uuid via copy
+        val base = Container(name = name, quantity = quantity)
+        val withUuid = base.copy(uuid = uuid)
+        return dao.insert(withUuid)
+    }
     suspend fun archive(id: Long) = dao.updateStatus(id, Status.ARCHIVED)
     suspend fun activate(id: Long) = dao.updateStatus(id, Status.ACTIVE)
     suspend fun softDelete(id: Long) = dao.updateStatus(id, Status.DELETED)

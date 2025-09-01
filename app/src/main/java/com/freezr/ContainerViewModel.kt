@@ -2,9 +2,12 @@ package com.freezr
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.freezr.data.model.Container
+import com.freezr.data.model.Settings
+import com.freezr.data.model.SortOrder
+import com.freezr.data.model.Status
 import com.freezr.data.repository.ContainerRepository
 import com.freezr.data.repository.SettingsRepository
-import com.freezr.data.model.*
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
@@ -19,6 +22,8 @@ class ContainerViewModel @Inject constructor(
     private val reminderScheduler: com.freezr.reminder.ReminderScheduler
 ) : ViewModel() {
     private val lastDeleted = MutableStateFlow<Container?>(null)
+    private val _scanDialog = MutableStateFlow<ScanDialogState?>(null)
+    val scanDialog: StateFlow<ScanDialogState?> = _scanDialog.asStateFlow()
 
     // Source of truth: persisted settings
     private val settings: StateFlow<Settings> = settingsRepo.settings
@@ -53,7 +58,35 @@ class ContainerViewModel @Inject constructor(
     fun reuse(id: Long, newName: String?) = viewModelScope.launch {
         containers.reuse(id, newName)
     }
-    fun scanAndAdd(uuid: String, name: String) = add(name) // placeholder mapping
+    // Invoked when a scan detects a uuid; populates dialog state (no DB write yet)
+    fun handleScan(uuid: String) = viewModelScope.launch {
+        val existing = containers.findByUuid(uuid)
+        _scanDialog.value = ScanDialogState(uuid = uuid, existing = existing)
+    }
+
+    fun dismissScanDialog() { _scanDialog.value = null }
+
+    fun createFromScan(name: String, reminderDays: Int? = null) = viewModelScope.launch {
+        val current = _scanDialog.value ?: return@launch
+        val id = containers.addFromScan(current.uuid, name = name)
+        scheduleReminder(id, reminderDays)
+        _scanDialog.value = null
+    }
+
+    fun reuseFromScan(newName: String?) = viewModelScope.launch {
+        val current = _scanDialog.value ?: return@launch
+        val existing = current.existing ?: return@launch
+        val id = containers.reuse(existing.id, newName ?: existing.name)
+        scheduleReminder(id, null)
+        _scanDialog.value = null
+    }
+
+    private fun scheduleReminder(id: Long, reminderDays: Int?) {
+        val settings = settings.value
+        val days = reminderDays ?: settings.defaultReminderDays
+        val triggerAt = System.currentTimeMillis() + days * 24L * 60L * 60L * 1000L
+        reminderScheduler.schedule(id, triggerAt)
+    }
     fun undoLastDelete() = viewModelScope.launch {
         lastDeleted.getAndUpdate { null }?.let { containers.add(it.name) }
     }
@@ -72,3 +105,5 @@ data class ContainerUiState(
     val sortOrder: SortOrder = SortOrder.CREATED_DESC,
     val showArchived: Boolean = false
 )
+
+data class ScanDialogState(val uuid: String, val existing: Container?)

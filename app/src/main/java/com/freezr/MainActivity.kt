@@ -47,6 +47,7 @@ fun FreezrApp(vm: ContainerViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showScan by remember { mutableStateOf(false) }
+    val scanDialog by vm.scanDialog.collectAsState()
 
     var labelTarget by remember { mutableStateOf<com.freezr.data.model.Container?>(null) }
     Scaffold(
@@ -60,8 +61,7 @@ fun FreezrApp(vm: ContainerViewModel) {
             if (showScan) {
                 ScanScreen(onClose = { showScan = false }, onResult = { uuid ->
                     showScan = false
-                    scope.launch { snackbarHostState.showSnackbar("Scanned $uuid") }
-                    // TODO integrate reuse/create flow
+                    vm.handleScan(uuid)
                 })
             } else {
             ContainerList(
@@ -79,6 +79,41 @@ fun FreezrApp(vm: ContainerViewModel) {
             )
             }
             BuildFooter()
+        }
+        scanDialog?.let { sd ->
+            var name by remember(sd.uuid) { mutableStateOf(sd.existing?.name ?: "") }
+            val existing = sd.existing
+            AlertDialog(
+                onDismissRequest = { vm.dismissScanDialog() },
+                title = { Text(if (existing == null) "New Scanned Item" else "Scanned Existing") },
+                text = {
+                    Column {
+                        Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(if (existing == null) "Name" else "Reuse Name") })
+                        if (existing != null) {
+                            Spacer(Modifier.height(4.dp))
+                            Text("Original: ${existing.name}", style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                },
+                confirmButton = {
+                    if (existing == null) {
+                        TextButton(enabled = name.isNotBlank(), onClick = {
+                            vm.createFromScan(name.trim())
+                            scope.launch { snackbarHostState.showSnackbar("Created from scan") }
+                        }) { Text("Create") }
+                    } else {
+                        TextButton(onClick = {
+                            vm.reuseFromScan(name.takeIf { it.isNotBlank() })
+                            scope.launch { snackbarHostState.showSnackbar("Reused from scan") }
+                        }) { Text("Reuse") }
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") }
+                }
+            )
         }
         labelTarget?.let { c ->
             AlertDialog(onDismissRequest = { labelTarget = null }, confirmButton = {
@@ -103,7 +138,7 @@ fun FreezrApp(vm: ContainerViewModel) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleArchived: () -> Unit, onScan: () -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
+    val contextLocal = androidx.compose.ui.platform.LocalContext.current
     var overflow by remember { mutableStateOf(false) }
     TopAppBar(
         title = { Text("Freezr") },
@@ -127,14 +162,14 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
                                 LabelPdfGenerator.Label(title = c.name.ifBlank { c.uuid.take(6) }, uuid = c.uuid)
                             }
                             if (labels.isNotEmpty()) {
-                                val file = LabelPdfGenerator.generate(context, labels, "labels.pdf")
-                                val uri = FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                                val file = LabelPdfGenerator.generate(contextLocal, labels, "labels.pdf")
+                                val uri = FileProvider.getUriForFile(contextLocal, contextLocal.packageName + ".fileprovider", file)
                                 val intent = Intent(Intent.ACTION_SEND).apply {
                                     type = "application/pdf"
                                     putExtra(Intent.EXTRA_STREAM, uri)
                                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Share labels PDF"))
+                                contextLocal.startActivity(Intent.createChooser(intent, "Share labels PDF"))
                             }
                         }
                     )
@@ -178,7 +213,6 @@ private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
 
 @Composable
 private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
-    val context = androidx.compose.ui.platform.LocalContext.current
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     var detected by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(detected) { detected?.let { onResult(it) } }
@@ -186,13 +220,14 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
     AndroidView(factory = { ctx: android.content.Context ->
             val previewView = PreviewView(ctx)
             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-            val executor = Executors.newSingleThreadExecutor()
+            val analysisExecutor = Executors.newSingleThreadExecutor()
+            val mainExecutor = androidx.core.content.ContextCompat.getMainExecutor(ctx)
             cameraProviderFuture.addListener({
                 val provider = cameraProviderFuture.get()
                 val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
                 val analyzer = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                 val scanner = BarcodeScanning.getClient()
-                analyzer.setAnalyzer(executor) { imageProxy ->
+                analyzer.setAnalyzer(analysisExecutor) { imageProxy ->
                     val mediaImage = imageProxy.image
                     if (mediaImage != null) {
                         val rotation = imageProxy.imageInfo.rotationDegrees
@@ -213,7 +248,7 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                     provider.unbindAll()
                     provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analyzer)
                 } catch (_: Exception) { }
-            }, executor)
+            }, mainExecutor)
             previewView
         }, modifier = Modifier.fillMaxSize())
         Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
