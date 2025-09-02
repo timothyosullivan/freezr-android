@@ -20,55 +20,75 @@ Goal: Make batch-cooking painless by tagging frozen containers with unique QR la
 
 ## 2. Users & Core Journeys
 **Solo home cook / meal prepper** – Print labels → cook → scan → set item → freeze; later scan to view age, mark used, or snooze.
-**Power prepper** – Bulk create labels, batch add scans with shared metadata, inventory to find expiring/oldest.
-
+## 1. Vision & Scope
+Goal: Make batch-cooking painless by tagging frozen containers with pre‑printed unique QR labels, then scanning to claim / view contents and “use-by” reminders—fast, offline, private, and delightful. Physical-first: users cannot create an item without scanning a label.
 ## 3. Functional Requirements
-### 3.1 Label Generation & Printing
-- Unique codes (UUIDv4). Payload: `freezr://v1/c/<uuid>`.
-- Human-readable short code (last 6 of UUID) beneath QR.
-- Layout presets + custom rows/cols, margins, QR size.
-- Android Print Framework + Save as PDF via system dialog.
-- Export sheets as PDF (SAF picker).
-**Acceptance:** 120 labels -> 120 unique UUIDs; print dialog opens & saves valid PDF; ≥95% scan success at 128–192px.
-
-### 3.2 Scanning & Item Creation
+**MVP (device-only) includes:**
+- Batch generate & print sheets of UNUSED placeholder QR labels (DB rows created on generation; no manual add without scan).
+- Scan UNUSED label → claim form (description, date frozen (default today), quantity, reminder override) → becomes ACTIVE.
+- Scan ACTIVE label → detail sheet (age, fields, actions: Mark Used, Archive, Edit, Extend Reminder).
+- Scan USED / ARCHIVED label → reuse flow (archives prior row & creates new ACTIVE preserving the physical QR's uuid) or (future) history view.
+- Store: name, date frozen, quantity/portion, notes, status (UNUSED→ACTIVE→USED/ARCHIVED), reminder days/override.
+- Default + per-item reminder offset; store reminderAt; local notifications with actions.
+- Inventory: filters (expiring soon, expired, used, archived, unused), sorts (age, name).
+- Local backup/restore (file, no cloud).
+- Polished accessible high-performance UX.
+- Play Store readiness (target, permissions, assets, listing).
 - Live scan (CameraX + ML Kit QR) offline.
-- Unknown UUID → Create flow (prefill today + default reminder).
-- Known UUID → Detail screen.
-- Manual short-code entry fallback.
-**Acceptance:** Cold start to scan ≤2.0s (Pixel 4a class); continuous ≥24 FPS; QR detect median <400ms; offline.
-
-### 3.3 Inventory & Details
+### 3.1 Label Generation & Printing
+- Batch generate placeholder rows (status UNUSED) each with UUIDv4; stored immediately so scanning finds them.
+- QR payload: `freezr://v1/c/<uuid>`.
+- Human-readable short code (first/last 6 chars) beneath QR for manual fallback.
+- Initial layout: A4 portrait 4×10 grid (40/pg) multi‑page; future presets for custom rows/cols.
+- Share / Print via generated multi-page PDF.
+- Acceptance: Request 120 → +120 UNUSED rows, 3 pages, unique UUIDs, >=95% scan success at ~150–200px QR size.
 - List: search (name/notes), filters (expiring ≤7d, expired, used, active), sorts (oldest, newest, A→Z).
-- Detail: editable fields (name, date frozen, quantity, reminder days, notes), history (created, edited, used).
-- Quick actions: Mark used, Snooze 7d, Edit.
-**Acceptance:** Expiring filter logic (today - frozenDate) >= (reminderDays - 7); Mark used hides unless filter includes used.
-
-### 3.4 Reminders & Notifications
+### 3.2 Scanning & Claim / Detail / Reuse
+- Live scan (CameraX + ML Kit) offline.
+- Branching:
+	* UNUSED → Claim form (requires description) → set frozenDate + ACTIVE.
+	* ACTIVE → Detail panel (edit, Mark Used, Archive, Extend Reminder).
+	* USED / ARCHIVED → Reuse dialog (archive old w/ randomized uuid & create new ACTIVE preserving original uuid) or view history (post-MVP).
+	* Unknown/malformed → brief snackbar error.
+- Manual short-code entry fallback (optional post-MVP).
+- Acceptance: Cold start ≤2.0s; detect-to-dialog ≤400ms; claim updates existing UNUSED row (no duplicate uuid row); reuse preserves physical uuid.
 - Default + per-item reminder days.
-- Schedule via WorkManager; notifications with actions (Mark used, Snooze 7d, Open).
-- Android 13+ POST_NOTIFICATIONS permission with rationale.
-**Acceptance:** Denied → banner (no re-prompt spam); survive reboot; due notifications arrive.
-
+### 3.3 Inventory & Details
+- Default list: ACTIVE only.
+- Filters: Expiring Soon (0 < reminderAt - now ≤ 7d), Expired (now > reminderAt), USED, ARCHIVED, UNUSED.
+- Sorts: Oldest/Newest (frozenDate), Name A→Z/Z→A.
+- Detail: age (days), time to reminder, edit fields, actions (Mark Used, Archive, Reuse if historical, Snooze 7d optional).
+- Acceptance: Mark Used removes from default list; Expiring Soon & Expired filters accurate; Reuse inserts new ACTIVE + archives prior with randomized uuid.
 ### 3.5 Settings
-- Default reminder days, label presets, theme (system/light/dark), biometric lock (optional).
-- Backup/restore encrypted JSON (export/import via SAF). Merge by UUID.
-**Acceptance:** Backup restores identical records; biometric uses Keystore; cancel returns to safe screen.
-
+### 3.4 Reminders & Notifications
+- reminderAt = frozenDate + selected days (or default) persisted (or derived lazily) and scheduled.
+- Reschedule on edit; cancel on Mark Used / Archive / Reuse.
+- Notification: "<name> frozen <N> days" + actions (Mark Used, Snooze 7d, Open) (Snooze optional if time).
+- Android 13+ permission rationale, non-blocking decline.
+- Acceptance: Creating ACTIVE schedules; editing date/reminder days updates schedule; Mark Used cancels; notification after reboot.
 ## 4. Non-Functional Requirements
-### 4.1 Performance & Footprint
-- AAB w/ Play App Signing.
-- Download ≤15 MB; cold start ≤2.0s (Pixel 4a). Smooth list ≥55 FPS @ 1k items.
-### 4.2 Security & Privacy
-- Room persistence; optional encryption for sensitive notes (Jetpack Security).
-- No analytics/ads/network (MVP). Minimal permissions: CAMERA, POST_NOTIFICATIONS (13+).
-- Privacy Policy: local-only processing; Data safety reflects on-device access only.
-### 4.3 Accessibility & UX
-- Material 3 + Compose; large touch targets; TalkBack labels; dynamic type; high contrast.
-- Core App Quality checklist compliance.
-
 ## 5. Data Model (MVP)
-**Container**: id (UUID PK), name, frozenDate (UTC), reminderDays (nullable → default), quantity, notes (encrypted optional), status (ACTIVE|USED), createdAt, updatedAt.
+**Container**: id (Long PK), uuid (UUIDv4 unique), name (blank until claimed), frozenDate (nullable until claimed), quantity (Int, default 1), reminderDays (nullable → use Settings.defaultReminderDays), reminderAt (optional cached), notes (nullable), status (UNUSED|ACTIVE|USED|ARCHIVED|DELETED internal), createdAt, updatedAt, dateUsed (nullable).
+**Settings**: defaultReminderDays, future: category shelf-life defaults, label presets, biometricEnabled.
+Rules:
+- Batch generation inserts UNUSED placeholder rows.
+- Claim transitions UNUSED→ACTIVE, sets name & frozenDate (if null).
+- Mark Used sets status USED + dateUsed, cancels reminder.
+- Archive sets ARCHIVED, cancels reminder.
+- Reuse: archive prior (randomize old uuid) then insert new ACTIVE with original uuid.
+- DELETED = soft delete (hidden).
+Implemented:
+-- Data model: Room `Container` uses auto-increment Long `id` + `uuid` (unique). Status values: ACTIVE, ARCHIVED, DELETED, USED (UNUSED not yet in code at snapshot time, planned in revised spec).
+- No analytics/ads/network (MVP). Minimal permissions: CAMERA, POST_NOTIFICATIONS (13+).
+Next Alignment Steps (updated):
+1. Add UNUSED status & placeholder batch generation + PDF wiring.
+2. Scan branching logic (UNUSED claim / ACTIVE detail / historical reuse).
+3. Reminder enrichment & cancellation paths.
+4. Settings for default reminder days & derived category defaults (future).
+5. Expiring Soon & Expired filters using reminderAt.
+Change Log:
+- 2025-09-01 (later): Added Section 13 with current implementation snapshot (schema v3 with Long id + uuid, basic list/add/archive/delete, single QR label dialog, PDF label generator utility stub, reuse() backend clone, reminder scheduler scaffold). Original PRS retained as target scope.
+- 2025-09-02: Overhauled requirements to introduce physical-first placeholder labels (UNUSED status), scan branching, refined data model & reminder logic.
 **Settings**: defaultReminderDays, label layout presets, biometricEnabled.
 Rules: Unique id enforced; scanning existing UUID updates (no duplicate). Soft delete via status=USED.
 
