@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import android.app.PendingIntent
+import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
 import dagger.assisted.Assisted
@@ -43,10 +45,24 @@ class ReminderWorker @AssistedInject constructor(
     override suspend fun doWork(): Result {
         val id = inputData.getLong(KEY_ID, -1)
         ensureChannel()
+        val markUsedIntent = Intent(applicationContext, ReminderActionReceiver::class.java).apply {
+            action = ReminderActionReceiver.ACTION_MARK_USED
+            putExtra(ReminderActionReceiver.EXTRA_ID, id)
+        }
+        val snoozeIntent = Intent(applicationContext, ReminderActionReceiver::class.java).apply {
+            action = ReminderActionReceiver.ACTION_SNOOZE
+            putExtra(ReminderActionReceiver.EXTRA_ID, id)
+        }
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
+        val markUsedPending = PendingIntent.getBroadcast(applicationContext, (id * 2).toInt(), markUsedIntent, flags)
+        val snoozePending = PendingIntent.getBroadcast(applicationContext, (id * 2 + 1).toInt(), snoozeIntent, flags)
         val notif = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("Freezr Reminder")
-            .setContentText("Check item #$id in your freezer")
+            .setContentText("Item #$id may be expiring soon")
+            .addAction(0, "Used", markUsedPending)
+            .addAction(0, "+7d", snoozePending)
+            .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
         NotificationManagerCompat.from(applicationContext).notify((id % Int.MAX_VALUE).toInt(), notif)

@@ -45,7 +45,20 @@ import androidx.compose.ui.graphics.toArgb
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val vm: ContainerViewModel by viewModels()
-    override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); setContent { FreezrApp(vm) } }
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        maybeRequestNotificationPermission()
+        setContent { FreezrApp(vm) }
+    }
+
+    private fun maybeRequestNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            val perm = android.Manifest.permission.POST_NOTIFICATIONS
+            if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(arrayOf(perm), 1001)
+            }
+        }
+    }
 }
 
 @Composable
