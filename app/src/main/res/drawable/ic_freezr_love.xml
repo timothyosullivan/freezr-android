@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+    <!-- Outer circle backdrop -->
+    <path android:fillColor="#0A2A45" android:pathData="M100,0A100,100 0 1 1 99.99,0z"/>
+    <!-- Fridge body -->
+    <path android:fillColor="#0F3B5F" android:pathData="M60,35h80a6,6 0 0 1 6,6v118a6,6 0 0 1 -6,6h-80a6,6 0 0 1 -6,-6v-118a6,6 0 0 1 6,-6z"/>
+    <!-- Door separator line -->
+    <path android:strokeColor="#1F6FA5" android:strokeWidth="3" android:pathData="M100,35L100,165"/>
+    <!-- Handle left -->
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="5" android:strokeLineCap="round" android:pathData="M88,78L88,102"/>
+    <!-- Handle right (small) -->
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="4" android:strokeLineCap="round" android:pathData="M112,115L112,130"/>
+    <!-- Heart (love) slightly larger -->
+    <path android:fillColor="#FF6FA5" android:pathData="M100,78c-7,-13 -26,-15 -33,1 -6,15 6,29 33,45 27,-16 39,-30 33,-45 -7,-16 -26,-14 -33,-1z"/>
+    <!-- Food symbol: bowl + fork + spoon -->
+    <path android:fillColor="#FFFFFF" android:fillAlpha="0.9" android:pathData="M68,144c0,11 15,20 32,20 17,0 32,-9 32,-20H68z"/>
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="3" android:pathData="M68,144c0,11 15,20 32,20 17,0 32,-9 32,-20"/>
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M84,112L84,132"/>
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M116,112L116,132"/>
+    <!-- Snowflake (freezer) simple lines -->
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M100,60L100,72"/>
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M94,66L106,66"/>
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M95,61L105,71"/>
+    <path android:strokeColor="#BFE6FF" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M105,61L95,71"/>
+</vector>
