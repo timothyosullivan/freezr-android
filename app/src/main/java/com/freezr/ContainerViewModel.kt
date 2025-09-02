@@ -122,6 +122,8 @@ class ContainerViewModel @Inject constructor(
         when {
             existing == null -> {
                 val id = containers.addFromScan(current.uuid, name = name)
+                // If user supplied a shelf life for a brand new scan, persist it (was previously ignored – bug fix)
+                if (shelfLifeDays != null) containers.updateShelfLifeDays(id, shelfLifeDays)
                 if (reminderDays != null) scheduleReminder(id, reminderDays)
             }
             existing.status == Status.UNUSED -> {

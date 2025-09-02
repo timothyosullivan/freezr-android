@@ -141,4 +141,15 @@ class ContainerViewModelTest {
         advanceUntilIdle()
         assertTrue(containerDao.current().any { it.id == 10L && it.status == Status.USED })
     }
+
+    @Test
+    fun createFromScan_withShelfLife_persistsShelfLife() = runTest {
+        val (vm, containerDao, _) = buildViewModel()
+        vm.handleScan("new-shelf-scan-1")
+        advanceUntilIdle()
+        vm.createFromScan("Fish Cakes", shelfLifeDays = 42)
+        advanceUntilIdle()
+        val created = containerDao.current().firstOrNull { it.name == "Fish Cakes" }
+        assertEquals(42, created?.shelfLifeDays)
+    }
 }
