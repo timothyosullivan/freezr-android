@@ -6,8 +6,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ContainerDao {
-    @Query("SELECT * FROM containers WHERE status != 'DELETED' AND (:includeArchived OR status != 'ARCHIVED') ORDER BY CASE WHEN :order = 'NAME_ASC' THEN name END ASC, CASE WHEN :order = 'NAME_DESC' THEN name END DESC, CASE WHEN :order = 'CREATED_ASC' THEN createdAt END ASC, CASE WHEN :order = 'CREATED_DESC' THEN createdAt END DESC, id DESC")
-    fun observe(includeArchived: Boolean, order: String): Flow<List<Container>>
+    @Query("SELECT * FROM containers WHERE status != 'DELETED' AND (:includeUsed OR status != 'USED') ORDER BY CASE WHEN :order = 'NAME_ASC' THEN name END ASC, CASE WHEN :order = 'NAME_DESC' THEN name END DESC, CASE WHEN :order = 'CREATED_ASC' THEN createdAt END ASC, CASE WHEN :order = 'CREATED_DESC' THEN createdAt END DESC, id DESC")
+    fun observe(includeUsed: Boolean, order: String): Flow<List<Container>>
 
     @Query("SELECT * FROM containers WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): Container?

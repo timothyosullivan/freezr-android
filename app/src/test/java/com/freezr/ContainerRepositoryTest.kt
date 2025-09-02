@@ -31,13 +31,13 @@ class ContainerRepositoryTest {
     }
 
     @Test
-    fun add_and_archive_flow() = runBlocking {
+    fun add_and_mark_used_flow() = runBlocking {
         val id = repo.add("Alpha")
         val initial = repo.observe(false, com.freezr.data.model.SortOrder.CREATED_DESC).first()
         assertEquals(1, initial.size)
         assertEquals("Alpha", initial.first().name)
-        repo.archive(id)
-        val afterArchive = repo.observe(true, com.freezr.data.model.SortOrder.CREATED_DESC).first()
-        assertEquals(Status.ARCHIVED, afterArchive.first().status)
+        repo.markUsed(id)
+        val after = repo.observe(true, com.freezr.data.model.SortOrder.CREATED_DESC).first()
+        assertEquals(Status.USED, after.first().status)
     }
 }

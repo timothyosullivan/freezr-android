@@ -8,8 +8,8 @@ import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 
 class ContainerRepository(private val dao: ContainerDao) {
-    fun observe(showArchived: Boolean, sortOrder: SortOrder): Flow<List<Container>> =
-        dao.observe(showArchived, sortOrder.name)
+    fun observe(showUsed: Boolean, sortOrder: SortOrder): Flow<List<Container>> =
+        dao.observe(showUsed, sortOrder.name)
 
     suspend fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) =
         dao.insert(Container(name = name, quantity = quantity, reminderDays = reminderDays))
@@ -21,8 +21,7 @@ class ContainerRepository(private val dao: ContainerDao) {
         val withUuid = base.copy(uuid = uuid)
         return dao.insert(withUuid)
     }
-    suspend fun archive(id: Long) = dao.updateStatus(id, Status.ARCHIVED)
-    suspend fun activate(id: Long) = dao.updateStatus(id, Status.ACTIVE)
+    // archive/activate removed; markUsed + reuse flows cover lifecycle
     suspend fun softDelete(id: Long) = dao.updateStatus(id, Status.DELETED)
     suspend fun markUsed(id: Long) {
         val existing = dao.getById(id) ?: return
@@ -81,16 +80,16 @@ class ContainerRepository(private val dao: ContainerDao) {
 
     /**
      * Reuse flow triggered from scanning an existing QR label:
-     * 1. Archive the old record (so history is preserved) by marking it ARCHIVED and giving it a new random uuid so we can keep the original uuid for the new active record.
-     * 2. Insert a new ACTIVE record with the original uuid and (optionally) updated name.
-     * This preserves the physical label's QR code while keeping an archived snapshot.
+     * 1. Mark old record USED and assign it a new random uuid so we can keep the original uuid for the new ACTIVE record.
+     * 2. Insert a new ACTIVE record with the original uuid and optional updated name.
+     * This preserves label QR while keeping historical USED snapshot.
      */
     suspend fun reusePreserveUuid(id: Long, newName: String?): Long {
         val existing = dao.getById(id) ?: return -1
         val originalUuid = existing.uuid
         val now = System.currentTimeMillis()
-        // Archive old (assign a new uuid so unique constraint allows new row with original uuid)
-        dao.update(existing.copy(status = Status.ARCHIVED, uuid = UUID.randomUUID().toString(), updatedAt = now))
+    // Mark old used (assign a new uuid so unique constraint allows new row with original uuid)
+    dao.update(existing.copy(status = Status.USED, dateUsed = now, uuid = UUID.randomUUID().toString(), updatedAt = now))
         // Insert new active record with original uuid
         return dao.insert(
             Container(

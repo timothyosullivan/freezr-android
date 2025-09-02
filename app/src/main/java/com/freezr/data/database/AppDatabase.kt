@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.freezr.data.model.Container
 import com.freezr.data.model.Settings
 
-@Database(entities = [Container::class, Settings::class], version = 4, exportSchema = false)
+@Database(entities = [Container::class, Settings::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun containerDao(): ContainerDao
     abstract fun settingsDao(): SettingsDao
@@ -48,6 +48,13 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE containers ADD COLUMN reminderAt INTEGER")
                 db.execSQL("ALTER TABLE containers ADD COLUMN dateUsed INTEGER")
+            }
+        }
+        // Migration 4->5: collapse ARCHIVED status into USED; set dateUsed if null
+        val MIGRATION_4_5 = object : Migration(4,5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // For any rows with legacy ARCHIVED status, mark as USED and stamp dateUsed if missing
+                db.execSQL("UPDATE containers SET status = 'USED', dateUsed = COALESCE(dateUsed, strftime('%s','now')*1000) WHERE status = 'ARCHIVED'")
             }
         }
     }

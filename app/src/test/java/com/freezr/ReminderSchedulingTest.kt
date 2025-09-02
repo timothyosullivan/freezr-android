@@ -20,7 +20,7 @@ class ReminderSchedulingTest {
     private class FakeContainerDao: ContainerDao {
         private var nextId = 1L
         private val backing = MutableStateFlow<List<Container>>(emptyList())
-        override fun observe(includeArchived: Boolean, order: String): Flow<List<Container>> = backing
+    override fun observe(includeUsed: Boolean, order: String): Flow<List<Container>> = backing
     override suspend fun getById(id: Long): Container? = backing.value.firstOrNull { it.id == id }
     override suspend fun getByUuid(uuid: String): Container? = backing.value.firstOrNull { it.uuid == uuid }
         override suspend fun insert(container: Container): Long { val c = container.copy(id = nextId++); backing.value = backing.value + c; return c.id }

@@ -37,6 +37,9 @@ import java.util.concurrent.Executors
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 
 @AndroidEntryPoint
@@ -55,7 +58,7 @@ fun FreezrApp(vm: ContainerViewModel) {
 
     var labelTarget by remember { mutableStateOf<com.freezr.data.model.Container?>(null) }
     Scaffold(
-        topBar = { TopBar(state, onSort = vm::setSort, onToggleArchived = { vm.setShowArchived(!state.showArchived) }, onScan = { showScan = true }) },
+    topBar = { TopBar(state, onSort = vm::setSort, onToggleUsed = { vm.setShowUsed(!state.showUsed) }, onScan = { showScan = true }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             // Only creation path is scanning; FAB opens scanner
@@ -72,8 +75,7 @@ fun FreezrApp(vm: ContainerViewModel) {
             } else {
             ContainerList(
                 items = state.items,
-                onArchive = vm::archive,
-                onActivate = vm::activate,
+                onMarkUsed = vm::markUsed,
                 onDelete = { id ->
                     vm.softDelete(id)
                     scope.launch {
@@ -137,8 +139,18 @@ fun FreezrApp(vm: ContainerViewModel) {
                     text = {
                         Column {
                             Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(4.dp))
-                            Text("Status: ACTIVE", style = MaterialTheme.typography.labelSmall)
+                            Spacer(Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                // Colored status dot for intuitive visual cue
+                                val statusColor = Color(0xFF2E7D32) // ACTIVE green
+                                Box(
+                                    Modifier
+                                        .size(14.dp)
+                                        .background(statusColor, CircleShape)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Active", style = MaterialTheme.typography.labelMedium)
+                            }
                         }
                     },
                     confirmButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") } }
@@ -148,7 +160,7 @@ fun FreezrApp(vm: ContainerViewModel) {
                     title = { Text("Reuse Label") },
                     text = {
                         Column {
-                            Text("Archived/Used label: ${existing?.name}", style = MaterialTheme.typography.bodySmall)
+                            Text("Used label: ${existing?.name}", style = MaterialTheme.typography.bodySmall)
                             Spacer(Modifier.height(8.dp))
                             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("New Description (optional)") })
                         }
@@ -185,14 +197,14 @@ fun FreezrApp(vm: ContainerViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleArchived: () -> Unit, onScan: () -> Unit) {
+private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUsed: () -> Unit, onScan: () -> Unit) {
     val contextLocal = androidx.compose.ui.platform.LocalContext.current
     var overflow by remember { mutableStateOf(false) }
     TopAppBar(
         title = { Text("Freezr") },
         actions = {
             SortMenu(current = state.sortOrder, onSelect = onSort)
-            FilterArchivedChip(show = state.showArchived, onToggle = onToggleArchived)
+            FilterUsedChip(show = state.showUsed, onToggle = onToggleUsed)
             // Overflow menu for secondary actions to reduce crowding
             Box {
                 TextButton(onClick = { overflow = true }) { Text("⋮") }
@@ -373,34 +385,61 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
 }
 
 @Composable
-private fun FilterArchivedChip(show: Boolean, onToggle: () -> Unit) {
-    AssistChip(onClick = onToggle, label = { Text(if (show) "Archived On" else "Archived Off") }, modifier = Modifier.testTag(UiTestTags.FilterArchivedChip))
+private fun FilterUsedChip(show: Boolean, onToggle: () -> Unit) {
+    AssistChip(onClick = onToggle, label = { Text(if (show) "Show Used" else "Hide Used") }, modifier = Modifier.testTag(UiTestTags.FilterArchivedChip))
 }
 
 // Removed AddFab: creation now exclusively via scanning a QR code.
 
 @Composable
-private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onActivate: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
+private fun ContainerList(items: List<Container>, onMarkUsed: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(8.dp).testTag(UiTestTags.ContainerList)) {
         items(items, key = { it.id }) { c ->
-            ElevatedCard(Modifier.fillMaxWidth().padding(vertical = 4.dp).testTag("${'$'}{UiTestTags.ContainerCardPrefix}${'$'}{c.id}")) {
+            val statusColor = when (c.status) {
+                Status.ACTIVE -> Color(0xFF2E7D32) // green 700
+                Status.USED -> Color(0xFFC62828)   // red 700
+                Status.UNUSED -> Color(0xFF607D8B) // blue grey 500 neutral placeholder
+                Status.DELETED -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+            }
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .testTag("${'$'}{UiTestTags.ContainerCardPrefix}${'$'}{c.id}")
+            ) {
                 Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
-                        Text(c.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        val qtyLine = "Qty: ${c.quantity}"
-                        Text(qtyLine, style = MaterialTheme.typography.bodySmall)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier
+                                    .size(14.dp)
+                                    .background(statusColor, CircleShape)
+                                    .testTag("StatusDot")
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                c.name.ifBlank { "(unnamed)" },
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+                            )
+                        }
+                        Spacer(Modifier.height(2.dp))
+                        Text("Qty: ${c.quantity}", style = MaterialTheme.typography.bodySmall)
                         val reminder = c.reminderDays?.let { "Rem: ${it}d" } ?: "Rem: default"
                         Text(reminder, style = MaterialTheme.typography.bodySmall)
-                        Text(c.status.name, style = MaterialTheme.typography.labelSmall)
-                        Text(c.uuid.take(8), style = MaterialTheme.typography.labelSmall)
+                        Spacer(Modifier.height(2.dp))
+                        // Compact meta line: show uuid snippet & textual status (for accessibility)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(c.status.name, style = MaterialTheme.typography.labelSmall)
+                            Spacer(Modifier.width(8.dp))
+                            Text(c.uuid.take(8), style = MaterialTheme.typography.labelSmall)
+                        }
                     }
-                    Row { 
+                    Row {
                         when (c.status) {
-                            Status.UNUSED -> { /* placeholder: no actions except maybe future claim shortcut */ }
-                            Status.ACTIVE -> TextButton(onClick = { onArchive(c.id) }, modifier = Modifier.testTag(UiTestTags.ArchiveButton)) { Text("Archive") }
-                            Status.ARCHIVED -> TextButton(onClick = { onActivate(c.id) }, modifier = Modifier.testTag(UiTestTags.ActivateButton)) { Text("Activate") }
-                            Status.DELETED -> {}
+                            Status.UNUSED -> {}
+                            Status.ACTIVE -> TextButton(onClick = { onMarkUsed(c.id) }) { Text("Used") }
                             Status.USED -> {}
+                            Status.DELETED -> {}
                         }
                         TextButton(onClick = { onLabel(c) }) { Text("Label") }
                         TextButton(onClick = { onDelete(c.id) }, modifier = Modifier.testTag(UiTestTags.DeleteButton)) { Text("Delete") }

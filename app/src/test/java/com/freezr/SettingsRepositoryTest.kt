@@ -33,8 +33,8 @@ class SettingsRepositoryTest {
     fun default_and_update() = runBlocking {
         val initial = repo.settings.first()
         assertEquals(Settings(), initial)
-        repo.updateShowArchived(true, initial)
+    repo.updateShowUsed(true, initial)
         val updated = repo.settings.first()
-        assertEquals(true, updated.showArchived)
+    assertEquals(true, updated.showUsed)
     }
 }

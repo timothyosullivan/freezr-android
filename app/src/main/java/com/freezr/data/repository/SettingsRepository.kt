@@ -10,6 +10,6 @@ class SettingsRepository(private val dao: SettingsDao) {
     val settings: Flow<Settings> = dao.observe().map { it ?: Settings() }
     suspend fun updateSort(sort: SortOrder, current: Settings) =
         dao.upsert(current.copy(sortOrder = sort))
-    suspend fun updateShowArchived(show: Boolean, current: Settings) =
-        dao.upsert(current.copy(showArchived = show))
+    suspend fun updateShowUsed(show: Boolean, current: Settings) =
+        dao.upsert(current.copy(showUsed = show))
 }

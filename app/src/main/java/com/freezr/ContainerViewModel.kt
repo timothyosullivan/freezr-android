@@ -31,11 +31,11 @@ class ContainerViewModel @Inject constructor(
 
     val state: StateFlow<ContainerUiState> = settings
         .flatMapLatest { s ->
-            containers.observe(s.showArchived, s.sortOrder).map { list ->
+        containers.observe(s.showUsed, s.sortOrder).map { list ->
                 ContainerUiState(
                     items = list,
                     sortOrder = s.sortOrder,
-                    showArchived = s.showArchived
+            showUsed = s.showUsed
                 )
             }
         }
@@ -43,16 +43,12 @@ class ContainerViewModel @Inject constructor(
 
     @Deprecated("Direct add disabled; create entries by scanning/claiming a label")
     fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) = viewModelScope.launch { /* no-op now */ }
-    fun archive(id: Long) = viewModelScope.launch {
-        // Cancel any outstanding reminder when archiving
-        reminderScheduler.cancel(id)
-        containers.archive(id)
-    }
+    // archive removed
     fun markUsed(id: Long) = viewModelScope.launch {
         reminderScheduler.cancel(id)
         containers.markUsed(id)
     }
-    fun activate(id: Long) = viewModelScope.launch { containers.activate(id) }
+    // activate removed
     fun softDelete(id: Long) = viewModelScope.launch {
         // Cancel any reminder when deleting
         reminderScheduler.cancel(id)
@@ -60,7 +56,6 @@ class ContainerViewModel @Inject constructor(
         containers.softDelete(id)
     }
     fun reuse(id: Long, newName: String?) = viewModelScope.launch {
-        // Reuse archives old container; cancel any reminder attached to old id
         reminderScheduler.cancel(id)
         containers.reuse(id, newName)
     }
@@ -128,16 +123,16 @@ class ContainerViewModel @Inject constructor(
         val current = settings.value
         if (current.sortOrder != sort) settingsRepo.updateSort(sort, current)
     }
-    fun setShowArchived(show: Boolean) = viewModelScope.launch {
+    fun setShowUsed(show: Boolean) = viewModelScope.launch {
         val current = settings.value
-        if (current.showArchived != show) settingsRepo.updateShowArchived(show, current)
+        if (current.showUsed != show) settingsRepo.updateShowUsed(show, current)
     }
 }
 
 data class ContainerUiState(
     val items: List<Container> = emptyList(),
     val sortOrder: SortOrder = SortOrder.CREATED_DESC,
-    val showArchived: Boolean = false
+    val showUsed: Boolean = false
 )
 
 data class ScanDialogState(val uuid: String, val existing: Container?)
@@ -145,8 +140,9 @@ data class ScanDialogState(val uuid: String, val existing: Container?)
     val mode: ScanMode = when {
         existing == null -> ScanMode.UNKNOWN
         existing.status == Status.UNUSED -> ScanMode.UNUSED
-        existing.status == Status.ACTIVE -> ScanMode.ACTIVE
-        else -> ScanMode.HISTORICAL
+    existing.status == Status.ACTIVE -> ScanMode.ACTIVE
+    existing.status == Status.USED -> ScanMode.HISTORICAL
+    else -> ScanMode.HISTORICAL
     }
 }
 

@@ -7,7 +7,7 @@ import androidx.room.PrimaryKey
 data class Settings(
     @PrimaryKey val key: String = "user",
     val sortOrder: SortOrder = SortOrder.CREATED_DESC,
-    val showArchived: Boolean = false,
+    val showUsed: Boolean = false,
     // Default reminder window (days) applied when Container.reminderDays == null
     val defaultReminderDays: Int = 60
 )

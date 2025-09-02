@@ -22,7 +22,7 @@ class MigrationTest {
             .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(1) {
                 override fun onCreate(db: SupportSQLiteDatabase) {
                     db.execSQL("CREATE TABLE IF NOT EXISTS containers (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, status TEXT NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
-                    db.execSQL("CREATE TABLE IF NOT EXISTS settings (key TEXT NOT NULL PRIMARY KEY, sortOrder TEXT NOT NULL, showArchived INTEGER NOT NULL)")
+                    db.execSQL("CREATE TABLE IF NOT EXISTS settings (key TEXT NOT NULL PRIMARY KEY, sortOrder TEXT NOT NULL, showArchived INTEGER NOT NULL)") // legacy column name
                     db.execSQL("INSERT INTO containers (id,name,status,createdAt,updatedAt) VALUES (1,'Test','ACTIVE',0,0)")
                     db.execSQL("INSERT INTO settings (key,sortOrder,showArchived) VALUES ('user','CREATED_DESC',0)")
                 }

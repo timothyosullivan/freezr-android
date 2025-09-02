@@ -24,7 +24,7 @@ class ContainerViewModelTest {
     private class FakeContainerDao : ContainerDao {
         private var nextId = 1L
         private val backing = MutableStateFlow<List<Container>>(emptyList())
-        override fun observe(includeArchived: Boolean, order: String): Flow<List<Container>> = backing
+    override fun observe(includeUsed: Boolean, order: String): Flow<List<Container>> = backing
     override suspend fun getById(id: Long): Container? = backing.value.firstOrNull { it.id == id }
     override suspend fun getByUuid(uuid: String): Container? = backing.value.firstOrNull { it.uuid == uuid }
         override suspend fun insert(container: Container): Long {
@@ -83,20 +83,20 @@ class ContainerViewModelTest {
     }
 
     @Test
-    fun setShowArchived_noChange_doesNotPersist() = runTest {
+    fun setShowUsed_noChange_doesNotPersist() = runTest {
         val (vm, _, settingsDao) = buildViewModel()
-        vm.setShowArchived(false)
+        vm.setShowUsed(false)
         advanceUntilIdle()
         assertTrue(settingsDao.upserts.isEmpty())
     }
 
     @Test
-    fun setShowArchived_change_persists() = runTest {
+    fun setShowUsed_change_persists() = runTest {
         val (vm, _, settingsDao) = buildViewModel()
-        vm.setShowArchived(true)
+        vm.setShowUsed(true)
         advanceUntilIdle()
         assertEquals(1, settingsDao.upserts.size)
-        assertTrue(settingsDao.upserts.single().showArchived)
+        assertTrue(settingsDao.upserts.single().showUsed)
     }
 
     @Test
@@ -134,14 +134,11 @@ class ContainerViewModelTest {
     }
 
     @Test
-    fun archive_then_activate_updatesStatus() = runTest {
+    fun markUsed_updatesStatus() = runTest {
         val (vm, containerDao, _) = buildViewModel()
         containerDao.seed(Container(id = 10, name = "Box", status = Status.ACTIVE))
-        vm.archive(10)
+        vm.markUsed(10)
         advanceUntilIdle()
-        assertTrue(containerDao.current().any { it.id == 10L && it.status == Status.ARCHIVED })
-        vm.activate(10)
-        advanceUntilIdle()
-        assertTrue(containerDao.current().any { it.id == 10L && it.status == Status.ACTIVE })
+        assertTrue(containerDao.current().any { it.id == 10L && it.status == Status.USED })
     }
 }

@@ -34,5 +34,5 @@ data class Container(
     val updatedAt: Long = Instant.now().toEpochMilli()
 )
 
-// Added UNUSED & USED; ARCHIVED/DELETED retained for history & soft delete.
-enum class Status { UNUSED, ACTIVE, ARCHIVED, DELETED, USED }
+// Lifecycle simplified: UNUSED -> ACTIVE -> USED (history) or DELETED (soft delete hidden).
+enum class Status { UNUSED, ACTIVE, DELETED, USED }
