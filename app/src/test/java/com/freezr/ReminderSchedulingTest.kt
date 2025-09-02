@@ -47,7 +47,8 @@ class ReminderSchedulingTest {
     fun schedulesReminderUsingDefaultDays() = runTest {
         val dao = FakeContainerDao(); val sdao = FakeSettingsDao(); val sched = CapturingScheduler()
         val vm = ContainerViewModel(ContainerRepository(dao), SettingsRepository(sdao), sched)
-        vm.add("ItemX")
+    vm.handleScan("scan-reminder-1")
+    vm.createFromScan("ItemX")
         advanceUntilIdle()
         assertTrue("Expected one scheduled reminder", sched.scheduled.size == 1)
         val (id, trigger) = sched.scheduled.first()

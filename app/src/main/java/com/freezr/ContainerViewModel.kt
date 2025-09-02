@@ -41,14 +41,8 @@ class ContainerViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ContainerUiState())
 
-    fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) = viewModelScope.launch {
-        val id = containers.add(name = name, quantity = quantity, reminderDays = reminderDays)
-        // Schedule reminder (placeholder logic): compute target days
-        val settings = settings.value
-        val days = reminderDays ?: settings.defaultReminderDays
-        val triggerAt = System.currentTimeMillis() + days * 24L * 60L * 60L * 1000L
-        reminderScheduler.schedule(id, triggerAt)
-    }
+    @Deprecated("Direct add disabled; create entries by scanning/claiming a label")
+    fun add(name: String, quantity: Int = 1, reminderDays: Int? = null) = viewModelScope.launch { /* no-op now */ }
     fun archive(id: Long) = viewModelScope.launch {
         // Cancel any outstanding reminder when archiving
         reminderScheduler.cancel(id)

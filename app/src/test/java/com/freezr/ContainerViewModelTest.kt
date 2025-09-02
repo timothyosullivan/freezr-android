@@ -123,9 +123,12 @@ class ContainerViewModelTest {
     }
 
     @Test
-    fun add_createsNewContainer() = runTest {
+    fun createFromScan_createsNewContainer() = runTest {
         val (vm, containerDao, _) = buildViewModel()
-        vm.add("Alpha")
+        // Simulate scanning unknown code
+        vm.handleScan("scan-uuid-1")
+        advanceUntilIdle()
+        vm.createFromScan("Alpha")
         advanceUntilIdle()
         assertTrue(containerDao.current().any { it.name == "Alpha" })
     }

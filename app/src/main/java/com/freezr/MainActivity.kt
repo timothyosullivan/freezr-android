@@ -58,7 +58,8 @@ fun FreezrApp(vm: ContainerViewModel) {
         topBar = { TopBar(state, onSort = vm::setSort, onToggleArchived = { vm.setShowArchived(!state.showArchived) }, onScan = { showScan = true }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
-            AddFab { name -> vm.add(name) }
+            // Only creation path is scanning; FAB opens scanner
+            FloatingActionButton(onClick = { showScan = true }, modifier = Modifier.testTag(UiTestTags.FabAdd)) { Text("Scan") }
         }
     ) { padding ->
     Column(Modifier.padding(padding).testTag(UiTestTags.RootColumn)) {
@@ -89,12 +90,29 @@ fun FreezrApp(vm: ContainerViewModel) {
             val existing = sd.existing
             var name by remember(sd.uuid) { mutableStateOf(existing?.name ?: "") }
             when (sd.mode) {
-                ScanMode.UNKNOWN -> AlertDialog(
-                    onDismissRequest = { vm.dismissScanDialog() },
-                    title = { Text("Unrecognized Label") },
-                    text = { Text("This QR isn't a known Freezr label. Print labels inside the app first.") },
-                    confirmButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") } }
-                )
+                ScanMode.UNKNOWN -> {
+                    var newName by remember(sd.uuid) { mutableStateOf("") }
+                    AlertDialog(
+                        onDismissRequest = { vm.dismissScanDialog() },
+                        title = { Text("Create From Scan") },
+                        text = {
+                            Column {
+                                Text("Scanned code not yet tracked. Save as a container.")
+                                Spacer(Modifier.height(8.dp))
+                                Text("Code: ${sd.uuid.take(48)}", style = MaterialTheme.typography.bodySmall)
+                                Spacer(Modifier.height(8.dp))
+                                OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("Name") })
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(enabled = newName.isNotBlank(), onClick = {
+                                vm.createFromScan(newName.trim())
+                                scope.launch { snackbarHostState.showSnackbar("Created from scan") }
+                            }) { Text("Create") }
+                        },
+                        dismissButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") } }
+                    )
+                }
                 ScanMode.UNUSED -> AlertDialog(
                     onDismissRequest = { vm.dismissScanDialog() },
                     title = { Text("Claim Label") },
@@ -306,9 +324,9 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                         scanner.process(image)
                             .addOnSuccessListener { list ->
                                 list.firstOrNull { it.format == Barcode.FORMAT_QR_CODE }?.rawValue?.let { value ->
-                                    if (value.startsWith(QR_PREFIX) && detected == null) {
-                                        val uuid = value.removePrefix(QR_PREFIX)
-                                        detected = uuid
+                                    if (detected == null) {
+                                        val uuid = if (value.startsWith(QR_PREFIX)) value.removePrefix(QR_PREFIX) else value
+                                        detected = uuid.take(120) // limit length defensively
                                     }
                                 }
                             }
@@ -359,19 +377,7 @@ private fun FilterArchivedChip(show: Boolean, onToggle: () -> Unit) {
     AssistChip(onClick = onToggle, label = { Text(if (show) "Archived On" else "Archived Off") }, modifier = Modifier.testTag(UiTestTags.FilterArchivedChip))
 }
 
-@Composable
-private fun AddFab(onAdd: (String) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("") }
-    if (open) {
-        AlertDialog(onDismissRequest = { open = false }, confirmButton = {
-            TextButton(enabled = text.isNotBlank(), onClick = { onAdd(text.trim()); text = ""; open = false }, modifier = Modifier.testTag(UiTestTags.AddDialogConfirm)) { Text("Add") }
-        }, dismissButton = { TextButton(onClick = { open = false }) { Text("Cancel") } }, title = { Text("New Container") }, text = {
-            OutlinedTextField(value = text, onValueChange = { text = it }, label = { Text("Name") }, modifier = Modifier.testTag(UiTestTags.AddDialogTextField))
-        })
-    }
-    FloatingActionButton(onClick = { open = true }, modifier = Modifier.testTag(UiTestTags.FabAdd)) { Text("Add") }
-}
+// Removed AddFab: creation now exclusively via scanning a QR code.
 
 @Composable
 private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onActivate: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
