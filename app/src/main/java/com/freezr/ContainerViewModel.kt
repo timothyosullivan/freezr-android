@@ -29,11 +29,13 @@ class ContainerViewModel @Inject constructor(
     private val settings: StateFlow<Settings> = settingsRepo.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, Settings())
 
+    private val _filter = MutableStateFlow(ReminderFilter.NONE)
     val state: StateFlow<ContainerUiState> = settings
         .flatMapLatest { s ->
         containers.observe(s.showUsed, s.sortOrder).map { list ->
+                val filtered = applyReminderFilter(list, _filter.value)
                 ContainerUiState(
-                    items = list,
+                    items = filtered,
                     sortOrder = s.sortOrder,
             showUsed = s.showUsed
                 )
@@ -127,12 +129,27 @@ class ContainerViewModel @Inject constructor(
         val current = settings.value
         if (current.showUsed != show) settingsRepo.updateShowUsed(show, current)
     }
+    fun setReminderFilter(filter: ReminderFilter) { _filter.value = filter }
+
+    private fun applyReminderFilter(list: List<Container>, filter: ReminderFilter): List<Container> {
+        if (filter == ReminderFilter.NONE) return list
+        val now = System.currentTimeMillis()
+        return when (filter) {
+            ReminderFilter.EXPIRING_SOON -> list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt > now && it.reminderAt - now <= 7L*24*60*60*1000 }
+            ReminderFilter.EXPIRED -> list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt <= now }
+            ReminderFilter.NONE -> list
+        }
+    }
+
+    fun snooze(id: Long, days: Int = 7) = viewModelScope.launch { containers.snooze(id, days) }
+    fun updateReminderDays(id: Long, days: Int) = viewModelScope.launch { containers.updateReminderDays(id, days) }
 }
 
 data class ContainerUiState(
     val items: List<Container> = emptyList(),
     val sortOrder: SortOrder = SortOrder.CREATED_DESC,
-    val showUsed: Boolean = false
+    val showUsed: Boolean = false,
+    val filter: ReminderFilter = ReminderFilter.NONE
 )
 
 data class ScanDialogState(val uuid: String, val existing: Container?)
@@ -147,4 +164,6 @@ data class ScanDialogState(val uuid: String, val existing: Container?)
 }
 
 enum class ScanMode { UNKNOWN, UNUSED, ACTIVE, HISTORICAL }
+
+enum class ReminderFilter { NONE, EXPIRING_SOON, EXPIRED }
 

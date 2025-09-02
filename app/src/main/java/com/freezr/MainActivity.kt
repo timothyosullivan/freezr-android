@@ -218,6 +218,7 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
         actions = {
             SortMenu(current = state.sortOrder, onSelect = onSort)
             FilterUsedChip(show = state.showUsed, onToggle = onToggleUsed)
+            ReminderFilterMenu(current = state.filter)
             // Overflow menu for secondary actions to reduce crowding
             Box {
                 TextButton(onClick = { overflow = true }) { Text("⋮") }
@@ -252,6 +253,22 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
         },
         modifier = Modifier.testTag(UiTestTags.TopBar)
     )
+}
+
+@Composable
+private fun ReminderFilterMenu(current: ReminderFilter) {
+    val vm: ContainerViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+    var expanded by remember { mutableStateOf(false) }
+    Box { 
+        TextButton(onClick = { expanded = true }) { Text(when(current){ ReminderFilter.NONE -> "All"; ReminderFilter.EXPIRING_SOON -> "Soon"; ReminderFilter.EXPIRED -> "Expired" }) }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            ReminderFilter.values().forEach { f ->
+                DropdownMenuItem(text = { Text(when(f){ ReminderFilter.NONE->"All"; ReminderFilter.EXPIRING_SOON->"Expiring ≤7d"; ReminderFilter.EXPIRED->"Expired" }) }, onClick = {
+                    vm.setReminderFilter(f); expanded = false
+                })
+            }
+        }
+    }
 }
 
 // Simple singleton holder for opening placeholder generation dialog without prop-drilling
