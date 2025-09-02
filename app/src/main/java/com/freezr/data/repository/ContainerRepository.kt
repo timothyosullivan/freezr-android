@@ -24,6 +24,10 @@ class ContainerRepository(private val dao: ContainerDao) {
     suspend fun archive(id: Long) = dao.updateStatus(id, Status.ARCHIVED)
     suspend fun activate(id: Long) = dao.updateStatus(id, Status.ACTIVE)
     suspend fun softDelete(id: Long) = dao.updateStatus(id, Status.DELETED)
+    suspend fun markUsed(id: Long) {
+        val existing = dao.getById(id) ?: return
+        dao.update(existing.copy(status = Status.USED, dateUsed = System.currentTimeMillis()))
+    }
     suspend fun reuse(id: Long, newName: String? = null): Long {
         val existing = dao.getById(id)
         return dao.insert(
@@ -68,6 +72,7 @@ class ContainerRepository(private val dao: ContainerDao) {
             reminderDays = reminderDays,
             status = Status.ACTIVE,
             frozenDate = System.currentTimeMillis(),
+            reminderAt = (System.currentTimeMillis() + ((reminderDays ?: existing.reminderDays) ?: 0) * 24L * 60L * 60L * 1000L),
             updatedAt = System.currentTimeMillis()
         )
         dao.update(updated)

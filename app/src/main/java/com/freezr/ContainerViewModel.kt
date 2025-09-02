@@ -48,6 +48,10 @@ class ContainerViewModel @Inject constructor(
         reminderScheduler.cancel(id)
         containers.archive(id)
     }
+    fun markUsed(id: Long) = viewModelScope.launch {
+        reminderScheduler.cancel(id)
+        containers.markUsed(id)
+    }
     fun activate(id: Long) = viewModelScope.launch { containers.activate(id) }
     fun softDelete(id: Long) = viewModelScope.launch {
         // Cancel any reminder when deleting

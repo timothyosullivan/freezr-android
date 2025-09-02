@@ -26,6 +26,10 @@ data class Container(
     val quantity: Int = 1,
     // Optional notes (could be encrypted in future)
     val notes: String? = null,
+    // When this container should trigger a reminder (epoch millis); nullable until scheduled
+    val reminderAt: Long? = null,
+    // When marked used/consumed
+    val dateUsed: Long? = null,
     val createdAt: Long = Instant.now().toEpochMilli(),
     val updatedAt: Long = Instant.now().toEpochMilli()
 )

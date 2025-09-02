@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.freezr.data.model.Container
 import com.freezr.data.model.Settings
 
-@Database(entities = [Container::class, Settings::class], version = 3, exportSchema = false)
+@Database(entities = [Container::class, Settings::class], version = 4, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun containerDao(): ContainerDao
     abstract fun settingsDao(): SettingsDao
@@ -25,7 +25,7 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("ALTER TABLE settings ADD COLUMN defaultReminderDays INTEGER NOT NULL DEFAULT 60")
             }
         }
-        // Migration 2->3: add uuid column with generated values and unique index
+    // Migration 2->3: add uuid column with generated values and unique index
         val MIGRATION_2_3 = object : Migration(2,3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE containers ADD COLUMN uuid TEXT")
@@ -41,6 +41,13 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_containers_uuid ON containers(uuid)")
                 // Make sure future inserts require uuid (Room model sets default, but enforce NOT NULL by recreating table)
                 // SQLite cannot alter column to NOT NULL with existing rows simply; skip for now (Room will always supply value).
+            }
+        }
+        // Migration 3->4: add reminderAt and dateUsed columns
+        val MIGRATION_3_4 = object : Migration(3,4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE containers ADD COLUMN reminderAt INTEGER")
+                db.execSQL("ALTER TABLE containers ADD COLUMN dateUsed INTEGER")
             }
         }
     }
