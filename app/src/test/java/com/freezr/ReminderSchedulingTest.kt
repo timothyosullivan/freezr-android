@@ -24,7 +24,9 @@ class ReminderSchedulingTest {
     override suspend fun getById(id: Long): Container? = backing.value.firstOrNull { it.id == id }
     override suspend fun getByUuid(uuid: String): Container? = backing.value.firstOrNull { it.uuid == uuid }
         override suspend fun insert(container: Container): Long { val c = container.copy(id = nextId++); backing.value = backing.value + c; return c.id }
+    override suspend fun insertAll(containers: List<Container>): List<Long> = containers.map { insert(it) }
         override suspend fun update(container: Container) {}
+    override suspend fun updateAll(containers: List<Container>) { /* no-op for tests */ }
         override suspend fun updateStatus(id: Long, status: Status) {}
     }
     private class FakeSettingsDao: SettingsDao {

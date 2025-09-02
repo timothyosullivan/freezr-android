@@ -46,6 +46,35 @@ class ContainerRepository(private val dao: ContainerDao) {
     suspend fun findByUuid(uuid: String) = dao.getByUuid(uuid)
 
     /**
+     * Generate a batch of UNUSED placeholder label rows. They start with blank name and UNUSED status.
+     * Returns the inserted containers (freshly generated uuids) for immediate PDF rendering.
+     */
+    suspend fun generatePlaceholders(count: Int): List<Container> {
+        if (count <= 0) return emptyList()
+        val list = (1..count).map {
+            Container(name = "", status = Status.UNUSED)
+        }
+        val ids = dao.insertAll(list)
+        return list.mapIndexed { idx, c -> c.copy(id = ids[idx]) }
+    }
+
+    /** Claim an UNUSED placeholder by uuid, updating its name and setting status ACTIVE. */
+    suspend fun claimPlaceholder(uuid: String, name: String, quantity: Int = 1, reminderDays: Int? = null): Long {
+        val existing = dao.getByUuid(uuid) ?: return -1
+        if (existing.status != Status.UNUSED) return existing.id // already claimed
+        val updated = existing.copy(
+            name = name,
+            quantity = quantity,
+            reminderDays = reminderDays,
+            status = Status.ACTIVE,
+            frozenDate = System.currentTimeMillis(),
+            updatedAt = System.currentTimeMillis()
+        )
+        dao.update(updated)
+        return updated.id
+    }
+
+    /**
      * Reuse flow triggered from scanning an existing QR label:
      * 1. Archive the old record (so history is preserved) by marking it ARCHIVED and giving it a new random uuid so we can keep the original uuid for the new active record.
      * 2. Insert a new ACTIVE record with the original uuid and (optionally) updated name.

@@ -32,7 +32,11 @@ class ContainerViewModelTest {
             backing.value = backing.value + assigned
             return assigned.id
         }
+        override suspend fun insertAll(containers: List<Container>): List<Long> {
+            return containers.map { insert(it) }
+        }
         override suspend fun update(container: Container) { backing.value = backing.value.map { if (it.id == container.id) container else it } }
+        override suspend fun updateAll(containers: List<Container>) { containers.forEach { update(it) } }
         override suspend fun updateStatus(id: Long, status: Status) { backing.value = backing.value.map { if (it.id == id) it.copy(status = status) else it } }
         fun seed(vararg containers: Container) { backing.value = containers.toList() }
         fun current(): List<Container> = backing.value

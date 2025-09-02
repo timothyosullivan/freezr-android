@@ -14,10 +14,11 @@ data class Container(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     // Stable globally unique identifier for labels / QR codes
     val uuid: String = UUID.randomUUID().toString(),
+    // Name may be blank for UNUSED placeholder labels (claimed later)
     val name: String,
     val status: Status = Status.ACTIVE,
-    // New fields (v2):
-    // When originally frozen (default to creation time for new rows)
+    // When originally frozen (default to creation time). For UNUSED placeholders we still stamp now;
+    // age calculations should ignore UNUSED status in UI logic.
     val frozenDate: Long = Instant.now().toEpochMilli(),
     // Per-item override of reminder days; null means use Settings.defaultReminderDays
     val reminderDays: Int? = null,
@@ -29,5 +30,5 @@ data class Container(
     val updatedAt: Long = Instant.now().toEpochMilli()
 )
 
-// Added USED for future inventory logic; legacy ARCHIVED/DELETED retained until refactor aligns with PRS.
-enum class Status { ACTIVE, ARCHIVED, DELETED, USED }
+// Added UNUSED & USED; ARCHIVED/DELETED retained for history & soft delete.
+enum class Status { UNUSED, ACTIVE, ARCHIVED, DELETED, USED }

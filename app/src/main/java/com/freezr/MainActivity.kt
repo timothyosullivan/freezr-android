@@ -325,6 +325,7 @@ private fun ContainerList(items: List<Container>, onArchive: (Long) -> Unit, onA
                     }
                     Row { 
                         when (c.status) {
+                            Status.UNUSED -> { /* placeholder: no actions except maybe future claim shortcut */ }
                             Status.ACTIVE -> TextButton(onClick = { onArchive(c.id) }, modifier = Modifier.testTag(UiTestTags.ArchiveButton)) { Text("Archive") }
                             Status.ARCHIVED -> TextButton(onClick = { onActivate(c.id) }, modifier = Modifier.testTag(UiTestTags.ActivateButton)) { Text("Activate") }
                             Status.DELETED -> {}

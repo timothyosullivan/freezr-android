@@ -18,8 +18,14 @@ interface ContainerDao {
     @Insert
     suspend fun insert(container: Container): Long
 
+    @Insert
+    suspend fun insertAll(containers: List<Container>): List<Long>
+
     @Update
     suspend fun update(container: Container)
+
+    @Update
+    suspend fun updateAll(containers: List<Container>)
 
     @Query("UPDATE containers SET status = :status, updatedAt = strftime('%s','now')*1000 WHERE id = :id")
     suspend fun updateStatus(id: Long, status: Status)
