@@ -39,7 +39,9 @@ class ContainerViewModel @Inject constructor(
                     sortOrder = s.sortOrder,
                     showUsed = s.showUsed,
                     filter = _filter.value,
-                    defaultReminderDays = s.defaultReminderDays
+                    defaultReminderDays = s.defaultReminderDays,
+                    expiringSoonDays = s.expiringSoonDays,
+                    criticalDays = s.criticalDays
                 )
             }
         }
@@ -73,25 +75,35 @@ class ContainerViewModel @Inject constructor(
 
     // (Removed earlier simpler createFromScan; unified version is below)
 
-    fun reuseFromScan(newName: String?) = viewModelScope.launch {
+    fun reuseFromScan(newName: String?, reminderDays: Int? = null, shelfLifeDays: Int? = null) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing ?: return@launch
         // Cancel any reminder on the old container before reusing
         reminderScheduler.cancel(existing.id)
         val id = containers.reusePreserveUuid(existing.id, newName)
-    if (id > 0) scheduleReminder(id, null)
+        if (id > 0) {
+            if (shelfLifeDays != null) containers.updateShelfLifeDays(id, shelfLifeDays)
+            // If custom days provided, persist them and schedule; else use default.
+            if (reminderDays != null) {
+                containers.updateReminderDays(id, reminderDays)
+                val triggerAt = System.currentTimeMillis() + reminderDays * 24L * 60L * 60L * 1000L
+                reminderScheduler.schedule(id, triggerAt)
+            } else {
+                scheduleReminder(id, null)
+            }
+        }
         _scanDialog.value = null
     }
 
     // Placeholder generation removed from printing flow: labels are now purely physical until scanned.
 
     /** Claim an UNUSED placeholder scanned label */
-    fun claimFromScan(name: String, reminderDays: Int? = null) = viewModelScope.launch {
+    fun claimFromScan(name: String, shelfLifeDays: Int? = null, reminderDays: Int? = null) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing ?: return@launch
         if (existing.status != Status.UNUSED) return@launch
-        val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, reminderDays = reminderDays)
-        if (id > 0) scheduleReminder(id, reminderDays)
+        val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, shelfLifeDays = shelfLifeDays, reminderDays = reminderDays)
+        if (id > 0 && reminderDays != null) scheduleReminder(id, reminderDays) // only schedule if user specified
         _scanDialog.value = null
     }
 
@@ -104,17 +116,17 @@ class ContainerViewModel @Inject constructor(
     // Removed generatePlaceholders() – labels for printing are now ephemeral and not inserted until scan claim.
     
     // Legacy path (may be removed when UI no longer calls it); only valid for UNKNOWN mode where we create new row from scanned uuid
-    fun createFromScan(name: String, reminderDays: Int? = null) = viewModelScope.launch {
+    fun createFromScan(name: String, reminderDays: Int? = null, shelfLifeDays: Int? = null) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing
         when {
             existing == null -> {
                 val id = containers.addFromScan(current.uuid, name = name)
-                scheduleReminder(id, reminderDays)
+                if (reminderDays != null) scheduleReminder(id, reminderDays)
             }
             existing.status == Status.UNUSED -> {
-                val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, reminderDays = reminderDays)
-                if (id > 0) scheduleReminder(id, reminderDays)
+                val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, shelfLifeDays = shelfLifeDays, reminderDays = reminderDays)
+                if (id > 0 && reminderDays != null) scheduleReminder(id, reminderDays)
             }
             else -> { /* ignore; UI should use reuse */ }
         }
@@ -136,20 +148,35 @@ class ContainerViewModel @Inject constructor(
         val current = settings.value
         if (current.defaultReminderDays != days) settingsRepo.updateDefaultReminderDays(days, current)
     }
+    fun setExpiringSoonDays(days: Int) = viewModelScope.launch {
+        val current = settings.value
+        if (current.expiringSoonDays != days) settingsRepo.updateExpiringSoonDays(days, current)
+    }
+    fun setCriticalDays(days: Int) = viewModelScope.launch {
+        val current = settings.value
+        if (current.criticalDays != days) settingsRepo.updateCriticalDays(days, current)
+    }
 
     private fun applyReminderFilter(list: List<Container>, filter: ReminderFilter): List<Container> {
         if (filter == ReminderFilter.NONE) return list
         val now = System.currentTimeMillis()
+        val settings = settings.value
+        val soonWindowMs = settings.expiringSoonDays * 24L * 60L * 60L * 1000L
         return when (filter) {
-            ReminderFilter.EXPIRING_SOON -> list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt > now && it.reminderAt - now <= 7L*24*60*60*1000 }
+            ReminderFilter.EXPIRING_SOON -> list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt > now && it.reminderAt - now <= soonWindowMs }
             ReminderFilter.EXPIRED -> list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt <= now }
             ReminderFilter.NONE -> list
         }
     }
 
     fun snooze(id: Long, days: Int = 7) = viewModelScope.launch { containers.snooze(id, days) }
-    fun updateReminderDays(id: Long, days: Int) = viewModelScope.launch { containers.updateReminderDays(id, days) }
+    fun updateReminderDays(id: Long, days: Int) = viewModelScope.launch {
+        containers.updateReminderDays(id, days)
+        val newAt = System.currentTimeMillis() + days * 24L * 60L * 60L * 1000L
+        reminderScheduler.schedule(id, newAt)
+    }
     fun updateReminderAt(id: Long, at: Long) = viewModelScope.launch { containers.updateReminderAt(id, at); reminderScheduler.schedule(id, at) }
+    fun updateShelfLifeDays(id: Long, days: Int) = viewModelScope.launch { containers.updateShelfLifeDays(id, days) }
 }
 
 data class ContainerUiState(
@@ -157,7 +184,9 @@ data class ContainerUiState(
     val sortOrder: SortOrder = SortOrder.CREATED_DESC,
     val showUsed: Boolean = false,
     val filter: ReminderFilter = ReminderFilter.NONE,
-    val defaultReminderDays: Int = 60
+    val defaultReminderDays: Int = 60,
+    val expiringSoonDays: Int = 7,
+    val criticalDays: Int = 2
 )
 
 data class ScanDialogState(val uuid: String, val existing: Container?)

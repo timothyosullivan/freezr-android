@@ -44,15 +44,12 @@ class ReminderSchedulingTest {
 
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
-    fun schedulesReminderUsingDefaultDays() = runTest {
+    fun doesNotScheduleReminderWhenNoDaysSpecified() = runTest {
         val dao = FakeContainerDao(); val sdao = FakeSettingsDao(); val sched = CapturingScheduler()
         val vm = ContainerViewModel(ContainerRepository(dao), SettingsRepository(sdao), sched)
     vm.handleScan("scan-reminder-1")
     vm.createFromScan("ItemX")
         advanceUntilIdle()
-        assertTrue("Expected one scheduled reminder", sched.scheduled.size == 1)
-        val (id, trigger) = sched.scheduled.first()
-        assertTrue(id == 1L)
-        assertTrue("Trigger should be in the future", trigger > System.currentTimeMillis())
+        assertTrue("Expected no scheduled reminders when user did not specify days", sched.scheduled.isEmpty())
     }
 }

@@ -20,8 +20,10 @@ data class Container(
     // When originally frozen (default to creation time). For UNUSED placeholders we still stamp now;
     // age calculations should ignore UNUSED status in UI logic.
     val frozenDate: Long = Instant.now().toEpochMilli(),
-    // Per-item override of reminder days; null means use Settings.defaultReminderDays
+    // Per-item override: notification reminder offset in days (when to notify). Null uses shelf life or default.
     val reminderDays: Int? = null,
+    // Per-item override of shelf life (duration food considered good) in days; null uses Settings.defaultReminderDays
+    val shelfLifeDays: Int? = null,
     // Quantity / portion count
     val quantity: Int = 1,
     // Optional notes (could be encrypted in future)

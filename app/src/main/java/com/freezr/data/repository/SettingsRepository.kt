@@ -14,4 +14,8 @@ class SettingsRepository(private val dao: SettingsDao) {
         dao.upsert(current.copy(showUsed = show))
     suspend fun updateDefaultReminderDays(days: Int, current: Settings) =
         dao.upsert(current.copy(defaultReminderDays = days))
+    suspend fun updateExpiringSoonDays(days: Int, current: Settings) =
+        dao.upsert(current.copy(expiringSoonDays = days))
+    suspend fun updateCriticalDays(days: Int, current: Settings) =
+        dao.upsert(current.copy(criticalDays = days))
 }

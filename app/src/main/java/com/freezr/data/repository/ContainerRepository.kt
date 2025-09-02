@@ -60,6 +60,11 @@ class ContainerRepository(private val dao: ContainerDao) {
         dao.update(existing.copy(reminderDays = days, reminderAt = newAt, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun updateShelfLifeDays(id: Long, days: Int) {
+        val existing = dao.getById(id) ?: return
+        dao.update(existing.copy(shelfLifeDays = days, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun updateReminderAt(id: Long, at: Long) {
         val existing = dao.getById(id) ?: return
         dao.update(existing.copy(reminderAt = at, updatedAt = System.currentTimeMillis()))
@@ -81,17 +86,20 @@ class ContainerRepository(private val dao: ContainerDao) {
     }
 
     /** Claim an UNUSED placeholder by uuid, updating its name and setting status ACTIVE. */
-    suspend fun claimPlaceholder(uuid: String, name: String, quantity: Int = 1, reminderDays: Int? = null): Long {
+    suspend fun claimPlaceholder(uuid: String, name: String, quantity: Int = 1, shelfLifeDays: Int? = null, reminderDays: Int? = null): Long {
         val existing = dao.getByUuid(uuid) ?: return -1
         if (existing.status != Status.UNUSED) return existing.id // already claimed
+        val now = System.currentTimeMillis()
+        val computedReminderAt = reminderDays?.let { now + it * 24L * 60L * 60L * 1000L }
         val updated = existing.copy(
             name = name,
             quantity = quantity,
+            shelfLifeDays = shelfLifeDays,
             reminderDays = reminderDays,
             status = Status.ACTIVE,
-            frozenDate = System.currentTimeMillis(),
-            reminderAt = (System.currentTimeMillis() + ((reminderDays ?: existing.reminderDays) ?: 0) * 24L * 60L * 60L * 1000L),
-            updatedAt = System.currentTimeMillis()
+            frozenDate = now,
+            reminderAt = computedReminderAt,
+            updatedAt = now
         )
         dao.update(updated)
         return updated.id
@@ -116,6 +124,7 @@ class ContainerRepository(private val dao: ContainerDao) {
                 uuid = originalUuid,
                 quantity = existing.quantity,
                 reminderDays = existing.reminderDays,
+                shelfLifeDays = existing.shelfLifeDays,
                 notes = existing.notes
             )
         )

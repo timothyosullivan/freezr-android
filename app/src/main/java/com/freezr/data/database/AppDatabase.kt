@@ -7,7 +7,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.freezr.data.model.Container
 import com.freezr.data.model.Settings
 
-@Database(entities = [Container::class, Settings::class], version = 5, exportSchema = false)
+@Database(entities = [Container::class, Settings::class], version = 7, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun containerDao(): ContainerDao
     abstract fun settingsDao(): SettingsDao
@@ -55,6 +55,19 @@ abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 // For any rows with legacy ARCHIVED status, mark as USED and stamp dateUsed if missing
                 db.execSQL("UPDATE containers SET status = 'USED', dateUsed = COALESCE(dateUsed, strftime('%s','now')*1000) WHERE status = 'ARCHIVED'")
+            }
+        }
+        // Migration 5->6: add expiringSoonDays & criticalDays to settings
+        val MIGRATION_5_6 = object : Migration(5,6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE settings ADD COLUMN expiringSoonDays INTEGER NOT NULL DEFAULT 7")
+                db.execSQL("ALTER TABLE settings ADD COLUMN criticalDays INTEGER NOT NULL DEFAULT 2")
+            }
+        }
+        // Migration 6->7: add shelfLifeDays to containers
+        val MIGRATION_6_7 = object : Migration(6,7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE containers ADD COLUMN shelfLifeDays INTEGER")
             }
         }
     }

@@ -4,46 +4,42 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.camera.core.*
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
-import kotlin.math.abs
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.ui.res.painterResource
+import androidx.compose.material3.*
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.launch
-import androidx.compose.foundation.Image
 import androidx.compose.ui.graphics.asImageBitmap
-import com.freezr.label.QrCodeGenerator
-import android.graphics.Bitmap
-import com.freezr.data.model.*
-import androidx.core.content.FileProvider
-import android.content.Intent
-import com.freezr.label.LabelPdfGenerator
-import com.freezr.label.QR_PREFIX
-import androidx.camera.view.PreviewView
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
-import com.google.mlkit.vision.common.InputImage
+import androidx.compose.ui.viewinterop.AndroidView
+import dagger.hilt.android.AndroidEntryPoint
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.common.InputImage
+import kotlinx.coroutines.launch
 import java.util.concurrent.Executors
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import kotlin.math.abs
+import com.freezr.data.model.*
+import com.freezr.label.QR_PREFIX
+import com.freezr.label.QrCodeGenerator
+import com.freezr.label.LabelPdfGenerator
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -53,7 +49,6 @@ class MainActivity : ComponentActivity() {
         maybeRequestNotificationPermission()
         setContent { FreezrApp(vm) }
     }
-
     private fun maybeRequestNotificationPermission() {
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             val perm = android.Manifest.permission.POST_NOTIFICATIONS
@@ -64,217 +59,118 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun FreezrApp(vm: ContainerViewModel) {
-    val state by vm.state.collectAsState()
+private fun FreezrApp(vm: ContainerViewModel) {
+    val ui by vm.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var showScan by remember { mutableStateOf(false) }
     val scanDialog by vm.scanDialog.collectAsState()
-
-    var labelTarget by remember { mutableStateOf<com.freezr.data.model.Container?>(null) }
     var settingsOpen by remember { mutableStateOf(false) }
+    var labelPreview: Container? by remember { mutableStateOf(null) }
+    var printing by remember { mutableStateOf(false) }
+    var pendingPrintCount by remember { mutableStateOf<Int?>(null) }
     Scaffold(
-    topBar = { TopBar(state, onSort = vm::setSort, onToggleUsed = { vm.setShowUsed(!state.showUsed) }, onScan = { showScan = true }, onOpenSettings = { settingsOpen = true }) },
+        topBar = { TopBar(ui, onSort = vm::setSort, onToggleUsed = { vm.setShowUsed(!ui.showUsed) }, onOpenSettings = { settingsOpen = true }, onPrint = { printing = true }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        floatingActionButton = {
-            // Only creation path is scanning; FAB opens scanner
-            FloatingActionButton(onClick = { showScan = true }, modifier = Modifier.testTag(UiTestTags.FabAdd)) { Text("Scan") }
-        }
+        floatingActionButton = { FloatingActionButton(onClick = { showScan = true }, modifier = Modifier.testTag(UiTestTags.FabAdd)) { Text("Scan") } }
     ) { padding ->
-    Column(Modifier.padding(padding).testTag(UiTestTags.RootColumn)) {
-            PlaceholderPrintDialog(vm) {}
+        Column(Modifier.padding(padding).testTag(UiTestTags.RootColumn)) {
             if (showScan) {
                 ScanScreen(onClose = { showScan = false }, onResult = { uuid ->
                     showScan = false
                     vm.handleScan(uuid)
                 })
             } else {
-            ContainerList(
-                items = state.items,
-                onMarkUsed = vm::markUsed,
-                onDelete = { id ->
-                    vm.softDelete(id)
-                    scope.launch {
-                        val res = snackbarHostState.showSnackbar("Deleted", actionLabel = "Undo")
-                        if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete()
-                    }
-                },
-                onLabel = { c -> labelTarget = c }
-            )
+                ContainerList(
+                    items = ui.items,
+                    expiringSoonDays = ui.expiringSoonDays,
+                    criticalDays = ui.criticalDays,
+                    defaultDays = ui.defaultReminderDays,
+                    onMarkUsed = vm::markUsed,
+                    onDelete = { id ->
+                        vm.softDelete(id)
+                        scope.launch {
+                            val res = snackbarHostState.showSnackbar("Deleted", actionLabel = "Undo")
+                            if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete()
+                        }
+                    },
+                    onLabel = { c -> labelPreview = c }
+                )
             }
             BuildFooter()
         }
         if (settingsOpen) SettingsDialog(vm = vm, onClose = { settingsOpen = false })
-        scanDialog?.let { sd ->
-            val existing = sd.existing
-            var name by remember(sd.uuid) { mutableStateOf(existing?.name ?: "") }
-            when (sd.mode) {
-                ScanMode.UNKNOWN -> {
-                    var newName by remember(sd.uuid) { mutableStateOf("") }
-                    AlertDialog(
-                        onDismissRequest = { vm.dismissScanDialog() },
-                        title = { Text("Create From Scan") },
-                        text = {
-                            Column {
-                                Text("Scanned code not yet tracked. Save as a container.")
-                                Spacer(Modifier.height(8.dp))
-                                Text("Code: ${sd.uuid.take(48)}", style = MaterialTheme.typography.bodySmall)
-                                Spacer(Modifier.height(8.dp))
-                                OutlinedTextField(value = newName, onValueChange = { newName = it }, label = { Text("Name") })
-                            }
-                        },
-                        confirmButton = {
-                            TextButton(enabled = newName.isNotBlank(), onClick = {
-                                vm.createFromScan(newName.trim())
-                                scope.launch { snackbarHostState.showSnackbar("Created from scan") }
-                            }) { Text("Create") }
-                        },
-                        dismissButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") } }
-                    )
+        val context = androidx.compose.ui.platform.LocalContext.current
+        if (printing) PrintDialog(onDismiss = { printing = false }) { count ->
+            printing = false
+            pendingPrintCount = count
+        }
+        pendingPrintCount?.let { cnt ->
+            LaunchedEffect(cnt) {
+                val labels = (1..cnt).map { LabelPdfGenerator.Label(title = "", uuid = java.util.UUID.randomUUID().toString()) }
+                val file = LabelPdfGenerator.generate(context, labels)
+                val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".fileprovider", file)
+                val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                    addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                ScanMode.UNUSED -> AlertDialog(
-                    onDismissRequest = { vm.dismissScanDialog() },
-                    title = { Text("Claim Label") },
-                    text = {
-                        Column {
-                            Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Description") })
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(enabled = name.isNotBlank(), onClick = {
-                            vm.claimFromScan(name.trim())
-                            scope.launch { snackbarHostState.showSnackbar("Label claimed") }
-                        }) { Text("Save") }
-                    },
-                    dismissButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") } }
-                )
-                ScanMode.ACTIVE -> AlertDialog(
-                    onDismissRequest = { vm.dismissScanDialog() },
-                    title = { Text(existing?.name ?: "Item") },
-                    text = {
-                        Column {
-                            Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(4.dp))
-                            val item = existing
-                            val now = System.currentTimeMillis()
-                            val reminderAt = item?.reminderAt
-                            val (label, color) = if (reminderAt != null) {
-                                val diff = reminderAt - now
-                                when {
-                                    diff < 0 -> rel(diff) to Color(0xFFC62828)
-                                    diff <= 7L*24*60*60*1000 -> rel(diff) to Color(0xFFF9A825)
-                                    else -> rel(diff) to Color(0xFF2E7D32)
-                                }
-                            } else "No reminder" to MaterialTheme.colorScheme.outline
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Box(Modifier.size(14.dp).background(color, CircleShape))
-                                Spacer(Modifier.width(8.dp))
-                                Text("Reminder: $label", style = MaterialTheme.typography.labelMedium)
-                            }
-                            if (reminderAt != null) {
-                                Spacer(Modifier.height(4.dp))
-                                TextButton(onClick = { vm.updateReminderAt(item!!.id, reminderAt + 7L*24*60*60*1000) }) { Text("Snooze +7d") }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        Row { 
-                            TextButton(onClick = { existing?.let { vm.markUsed(it.id) }; vm.dismissScanDialog() }) { Text("Mark Used") }
-                            TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") }
-                        }
-                    }
-                )
-                ScanMode.HISTORICAL -> AlertDialog(
-                    onDismissRequest = { vm.dismissScanDialog() },
-                    title = { Text("Reuse Label") },
-                    text = {
-                        Column {
-                            Text("Used label: ${existing?.name}", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("New Description (optional)") })
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(onClick = {
-                            vm.reuseFromScan(name.takeIf { it.isNotBlank() })
-                            scope.launch { snackbarHostState.showSnackbar("Reused label") }
-                        }) { Text("Reuse") }
-                    },
-                    dismissButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") } }
-                )
+                context.startActivity(android.content.Intent.createChooser(intent, "Share Labels PDF"))
+                pendingPrintCount = null
             }
         }
-        labelTarget?.let { c ->
-            AlertDialog(onDismissRequest = { labelTarget = null }, confirmButton = {
-                TextButton(onClick = { labelTarget = null }) { Text("Close") }
-            }, title = { Text("Label: ${c.name}") }, text = {
-                val matrix = remember(c.uuid) { QrCodeGenerator.matrix(QR_PREFIX + c.uuid, 256) }
-                val bmp = remember(matrix) {
-                    Bitmap.createBitmap(matrix.size, matrix.size, Bitmap.Config.ARGB_8888).apply {
-                        for (y in 0 until matrix.size) for (x in 0 until matrix.size) {
-                            setPixel(x,y, if (matrix.get(x,y)) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
-                        }
-                    }
+        labelPreview?.let { c ->
+            LabelPreviewDialog(container = c, defaultShelfLifeDays = ui.defaultReminderDays, onDismiss = { labelPreview = null })
+        }
+        scanDialog?.let { sd ->
+            val existing = sd.existing
+            when (sd.mode) {
+                ScanMode.UNKNOWN -> ClaimDialog(uuid = sd.uuid, initialName = "", onDismiss = vm::dismissScanDialog) { name, shelf, alert ->
+                    vm.createFromScan(name, reminderDays = alert, shelfLifeDays = shelf)
+                    scope.launch { snackbarHostState.showSnackbar("Created from scan") }
                 }
-                Column { Image(bmp.asImageBitmap(), contentDescription = "QR ${'$'}{c.name}")
-                    Text(c.uuid, style = MaterialTheme.typography.bodySmall)
+                ScanMode.UNUSED -> ClaimDialog(uuid = sd.uuid, initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert ->
+                    vm.claimFromScan(name, shelfLifeDays = shelf, reminderDays = alert)
+                    scope.launch { snackbarHostState.showSnackbar("Label claimed") }
                 }
-            })
+                ScanMode.ACTIVE -> ActiveDialog(container = existing!!, ui = ui, onDismiss = vm::dismissScanDialog,
+                    onShelfLife = { d -> vm.updateShelfLifeDays(existing.id, d) },
+                    onAlertDays = { d -> vm.updateReminderDays(existing.id, d) },
+                    onSnooze = { at -> vm.updateReminderAt(existing.id, at) },
+                    onMarkUsed = { vm.markUsed(existing.id) })
+                ScanMode.HISTORICAL -> ReuseDialog(initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert ->
+                    vm.reuseFromScan(name.ifBlank { null }, reminderDays = alert, shelfLifeDays = shelf)
+                    scope.launch { snackbarHostState.showSnackbar("Reused label") }
+                }
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUsed: () -> Unit, onScan: () -> Unit, onOpenSettings: () -> Unit) {
-    val contextLocal = androidx.compose.ui.platform.LocalContext.current
-    var overflow by remember { mutableStateOf(false) }
+private fun TopBar(ui: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUsed: () -> Unit, onOpenSettings: () -> Unit, onPrint: () -> Unit) {
     TopAppBar(
-        title = { Text("Freezr") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Freezr", style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.width(16.dp))
+                FilterUsedChip(ui.showUsed, onToggleUsed)
+            }
+        },
         actions = {
-            SortMenu(current = state.sortOrder, onSelect = onSort)
-            FilterUsedChip(show = state.showUsed, onToggle = onToggleUsed)
-            ReminderFilterMenu(current = state.filter)
-            // Overflow menu for secondary actions to reduce crowding
+            SortMenu(ui.sortOrder, onSort)
+            IconButton(onClick = { onPrint() }) { Icon(painterResource(id = R.drawable.ic_print), contentDescription = "Print QR Labels") }
+            var menu by remember { mutableStateOf(false) }
             Box {
-                TextButton(onClick = { overflow = true }) { Text("⋮") }
-                DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
-            DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Icon(painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_print), contentDescription = null)
-                                Spacer(Modifier.width(8.dp)); Text("Print Labels")
-                            }
-                        },
-                        onClick = {
-                            overflow = false
-                // Dialog will be triggered via shared state below
-                PlaceholderPrintController.open()
-                        }
-                    )
-            DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Icon(painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_scan), contentDescription = null)
-                                Spacer(Modifier.width(8.dp)); Text("Scan Label")
-                            }
-                        },
-                        onClick = {
-                            overflow = false
-                onScan()
-                        }
-                    )
+                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Menu") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                                Icon(imageVector = Icons.Filled.Settings, contentDescription = null)
-                                Spacer(Modifier.width(8.dp)); Text("Settings")
-                            }
-                        },
-                        onClick = { overflow = false; onOpenSettings() }
+                        text = { Text("Settings") },
+                        leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
+                        onClick = { menu = false; onOpenSettings() }
                     )
                 }
             }
@@ -284,89 +180,113 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
 }
 
 @Composable
-private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
-    val state by vm.state.collectAsState()
-    var daysText by remember(state.defaultReminderDays) { mutableStateOf(state.defaultReminderDays.toString()) }
-    AlertDialog(onDismissRequest = onClose, title = { Text("Settings") }, text = {
-        Column { 
-            Text("Default reminder days")
-            Spacer(Modifier.height(4.dp))
-            OutlinedTextField(value = daysText, onValueChange = { if (it.length <=3) daysText = it.filter { ch -> ch.isDigit() } }, singleLine = true, label = { Text("Days") })
+private fun PrintDialog(onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
+    var countText by remember { mutableStateOf("21") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Print Blank Labels") }, text = {
+        Column {
+            Text("How many blank labels do you want?", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
-            Text(
-                "Used as the default reminder window for new items when you scan a label (or reuse one) and haven't set a custom reminder.",
-                style = MaterialTheme.typography.bodySmall
-            )
+            OutlinedTextField(value = countText, onValueChange = { if (it.length<=3) countText = it.filter(Char::isDigit) }, label = { Text("Count") })
+            Spacer(Modifier.height(4.dp))
+            Text("They will contain only QR codes. After printing & cutting, scan to claim.", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = {
-        val days = daysText.toIntOrNull() ?: -1
-        TextButton(enabled = days in 1..365, onClick = { vm.setDefaultReminderDays(days); onClose() }) { Text("Save") }
-    }, dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } })
+        val count = countText.toIntOrNull()?.coerceIn(1, 500) ?: 0
+        TextButton(enabled = count>0, onClick = { onConfirm(count) }) { Text("Generate") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
+@Composable
+private fun ClaimDialog(uuid: String, initialName: String, onDismiss: () -> Unit, onSave: (String, Int?, Int?) -> Unit) {
+    var name by remember(uuid) { mutableStateOf(initialName) }
+    var shelfLife by remember { mutableStateOf("") }
+    var alert by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Claim Label") }, text = {
+        Column {
+            Text("UUID: $uuid", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Description") })
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = shelfLife, onValueChange = { if (it.length<=3) shelfLife = it.filter(Char::isDigit) }, label = { Text("Shelf life days (optional)") }, singleLine = true)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = alert, onValueChange = { if (it.length<=3) alert = it.filter(Char::isDigit) }, label = { Text("Reminder alert in (days, optional)") }, singleLine = true)
+            Spacer(Modifier.height(4.dp))
+            Text("Shelf life = total freshness. Reminder = earlier alert.", style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = {
+        val shelf = shelfLife.toIntOrNull()
+        val alertDays = alert.toIntOrNull()
+        TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), shelf, alertDays); onDismiss() }) { Text("Save") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+}
 
 @Composable
-private fun ReminderFilterMenu(current: ReminderFilter) {
-    val vm: ContainerViewModel = androidx.hilt.navigation.compose.hiltViewModel()
-    var expanded by remember { mutableStateOf(false) }
-    Box { 
-        TextButton(onClick = { expanded = true }) { Text(when(current){ ReminderFilter.NONE -> "All"; ReminderFilter.EXPIRING_SOON -> "Soon"; ReminderFilter.EXPIRED -> "Expired" }) }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            ReminderFilter.values().forEach { f ->
-                DropdownMenuItem(text = { Text(when(f){ ReminderFilter.NONE->"All"; ReminderFilter.EXPIRING_SOON->"Expiring ≤7d"; ReminderFilter.EXPIRED->"Expired" }) }, onClick = {
-                    vm.setReminderFilter(f); expanded = false
-                })
+private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: () -> Unit, onShelfLife: (Int) -> Unit, onAlertDays: (Int) -> Unit, onSnooze: (Long) -> Unit, onMarkUsed: () -> Unit) {
+    val now = System.currentTimeMillis()
+    val dayMs = 24L*60*60*1000L
+    val soonMs = ui.expiringSoonDays * dayMs
+    val criticalMs = ui.criticalDays * dayMs
+    val shelfLifeDays = container.shelfLifeDays ?: ui.defaultReminderDays
+    val shelfExpiry = container.createdAt + shelfLifeDays * dayMs
+    val reminderAt = container.reminderAt
+    val remainingShelf = (shelfExpiry - now)/dayMs
+    val shelfLabel = when {
+        remainingShelf < 0 -> "Expired ${-remainingShelf}d"
+        remainingShelf == 0L -> "Expires today"
+        else -> "$remainingShelf d left"
+    }
+    val shelfRemainingMs = shelfExpiry - now
+    val (alertLabel, color) = when {
+        shelfRemainingMs < 0 -> rel(shelfRemainingMs) to Color(0xFFC62828)
+        shelfRemainingMs <= criticalMs -> rel(shelfRemainingMs) to Color(0xFFC62828)
+        shelfRemainingMs <= soonMs -> rel(shelfRemainingMs) to Color(0xFFF9A825)
+        else -> rel(shelfRemainingMs) to Color(0xFF2E7D32)
+    }
+    var shelfInput by remember(container.shelfLifeDays) { mutableStateOf(container.shelfLifeDays?.toString() ?: "") }
+    var alertInput by remember(reminderAt, container.reminderDays) { mutableStateOf(container.reminderDays?.toString() ?: "") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Active Item" }) }, text = {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(14.dp).background(color, CircleShape))
+                Spacer(Modifier.width(8.dp))
+                Text("Alert: $alertLabel", style = MaterialTheme.typography.labelMedium)
+            }
+            Spacer(Modifier.height(4.dp)); Text("Shelf life: $shelfLabel", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(4.dp)); Text("Scanned: ${formatFullDate(container.createdAt)}", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = shelfInput, onValueChange = { if (it.length<=3) shelfInput = it.filter(Char::isDigit) }, label = { Text("Shelf life days") }, singleLine = true)
+            TextButton(enabled = shelfInput.toIntOrNull()!=null, onClick = { shelfInput.toIntOrNull()?.let(onShelfLife) }) { Text("Save Shelf Life") }
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = alertInput, onValueChange = { if (it.length<=3) alertInput = it.filter(Char::isDigit) }, label = { Text("Alert in days") }, singleLine = true)
+            TextButton(enabled = alertInput.toIntOrNull()!=null, onClick = { alertInput.toIntOrNull()?.let(onAlertDays) }) { Text("Save Alert") }
+            if (reminderAt != null) {
+                Spacer(Modifier.height(4.dp))
+                TextButton(onClick = { onSnooze(reminderAt + 7L*dayMs) }) { Text("Snooze +7d") }
             }
         }
-    }
+    }, confirmButton = {
+        Row { TextButton(onClick = { onMarkUsed(); onDismiss() }) { Text("Mark Used") }; TextButton(onClick = onDismiss) { Text("Close") } }
+    })
 }
 
-// Simple singleton holder for opening placeholder generation dialog without prop-drilling
-private object PlaceholderPrintController { var open by mutableStateOf(false); fun open() { open = true } fun close() { open = false } }
-
 @Composable
-private fun PlaceholderPrintDialog(vm: ContainerViewModel, onDismiss: () -> Unit) {
-    var countText by remember { mutableStateOf("20") }
-    var isGenerating by remember { mutableStateOf(false) }
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    if (!PlaceholderPrintController.open) return
-    AlertDialog(
-        onDismissRequest = { if (!isGenerating) { PlaceholderPrintController.close(); onDismiss() } },
-        title = { Text("Generate Labels") },
-        text = {
-            Column {
-                Text("Enter how many blank labels to print. They become containers only when scanned & claimed.")
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = countText, onValueChange = { if (it.length <= 3) countText = it.filter { ch -> ch.isDigit() } }, label = { Text("Count") })
-            }
-        },
-        confirmButton = {
-            val count = countText.toIntOrNull() ?: 0
-            val scope = rememberCoroutineScope()
-            TextButton(enabled = !isGenerating && count in 1..200, onClick = {
-                isGenerating = true
-                scope.launch(Dispatchers.Default) {
-                    val labels = List(count) {
-                        val uuid = java.util.UUID.randomUUID().toString()
-                        LabelPdfGenerator.Label(title = uuid.take(6), uuid = uuid)
-                    }
-                    val file = LabelPdfGenerator.generate(ctx, labels, "blank_labels.pdf")
-                    withContext(Dispatchers.Main) {
-                        isGenerating = false
-                        PlaceholderPrintController.close(); onDismiss()
-                        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "application/pdf"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        ctx.startActivity(Intent.createChooser(intent, "Share labels PDF"))
-                    }
-                }
-            }) { Text(if (isGenerating) "Working..." else "Generate") }
-        },
-        dismissButton = { TextButton(enabled = !isGenerating, onClick = { PlaceholderPrintController.close(); onDismiss() }) { Text("Cancel") } }
-    )
+private fun ReuseDialog(initialName: String, onDismiss: () -> Unit, onReuse: (String, Int?, Int?) -> Unit) {
+    var name by remember { mutableStateOf(initialName) }
+    var shelfLife by remember { mutableStateOf("") }
+    var alert by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Reuse Label") }, text = {
+        Column {
+            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (optional)") })
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = shelfLife, onValueChange = { if (it.length<=3) shelfLife = it.filter(Char::isDigit) }, label = { Text("Shelf life days (optional)") }, singleLine = true)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = alert, onValueChange = { if (it.length<=3) alert = it.filter(Char::isDigit) }, label = { Text("Reminder alert in (days, optional)") }, singleLine = true)
+            Spacer(Modifier.height(4.dp))
+            Text("Set either or both now, or edit later.", style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = {
+        TextButton(onClick = { onReuse(name, shelfLife.toIntOrNull(), alert.toIntOrNull()); onDismiss() }) { Text("Reuse") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
 @Composable
@@ -397,7 +317,7 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
     var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     LaunchedEffect(detected) { detected?.let { onResult(it) } }
     Box(Modifier.fillMaxSize()) {
-    AndroidView(factory = { ctx: android.content.Context ->
+        AndroidView(factory = { ctx: android.content.Context ->
             val previewView = PreviewView(ctx)
             val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
             val analysisExecutor = Executors.newSingleThreadExecutor()
@@ -418,7 +338,7 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                                 list.firstOrNull { it.format == Barcode.FORMAT_QR_CODE }?.rawValue?.let { value ->
                                     if (detected == null) {
                                         val uuid = if (value.startsWith(QR_PREFIX)) value.removePrefix(QR_PREFIX) else value
-                                        detected = uuid.take(120) // limit length defensively
+                                        detected = uuid.take(120)
                                     }
                                 }
                             }
@@ -434,9 +354,8 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
             }, mainExecutor)
             previewView
         }, modifier = Modifier.fillMaxSize())
-        // Framing overlay
         val guideSize = 220.dp
-        val frameColor = MaterialTheme.colorScheme.primary // capture outside draw scope
+        val frameColor = MaterialTheme.colorScheme.primary
         Box(
             Modifier
                 .align(Alignment.Center)
@@ -464,29 +383,32 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun FilterUsedChip(show: Boolean, onToggle: () -> Unit) {
     AssistChip(onClick = onToggle, label = { Text(if (show) "Show Used" else "Hide Used") }, modifier = Modifier.testTag(UiTestTags.FilterArchivedChip))
 }
 
-// Removed AddFab: creation now exclusively via scanning a QR code.
-
 @Composable
-private fun ContainerList(items: List<Container>, onMarkUsed: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
+private fun ContainerList(items: List<Container>, expiringSoonDays: Int, criticalDays: Int, defaultDays: Int, onMarkUsed: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(8.dp).testTag(UiTestTags.ContainerList)) {
         items(items, key = { it.id }) { c ->
             val now = System.currentTimeMillis()
             val baseStatusColor = when (c.status) {
                 Status.ACTIVE -> Color(0xFF2E7D32)
-                Status.USED -> Color(0xFFC62828)
-                Status.UNUSED -> Color(0xFF607D8B)
+                Status.USED, Status.UNUSED -> Color(0xFF607D8B)
                 Status.DELETED -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
             }
-            val statusColor = if (c.status == Status.ACTIVE && c.reminderAt != null) {
-                val diff = c.reminderAt - now
+            val soonMs = expiringSoonDays * 24L*60L*60L*1000L
+            val criticalMs = criticalDays * 24L*60L*60L*1000L
+            val statusColor = if (c.status == Status.ACTIVE) {
+                val dayMs = 24L*60L*60L*1000L
+                val shelfDays = c.shelfLifeDays ?: defaultDays
+                val shelfRemainingMs = (c.createdAt + shelfDays * dayMs) - now
                 when {
-                    diff < 0 -> Color(0xFFC62828) // overdue
-                    diff <= 7L*24*60*60*1000 -> Color(0xFFF9A825) // soon
+                    shelfRemainingMs < 0 -> Color(0xFFC62828)
+                    shelfRemainingMs <= criticalMs -> Color(0xFFC62828)
+                    shelfRemainingMs <= soonMs -> Color(0xFFF9A825)
                     else -> baseStatusColor
                 }
             } else baseStatusColor
@@ -499,24 +421,29 @@ private fun ContainerList(items: List<Container>, onMarkUsed: (Long) -> Unit, on
                 Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                Modifier
-                                    .size(14.dp)
-                                    .background(statusColor, CircleShape)
-                                    .testTag("StatusDot")
-                            )
+                            Box(Modifier.size(14.dp).background(statusColor, CircleShape).testTag("StatusDot"))
                             Spacer(Modifier.width(8.dp))
-                            Text(
-                                c.name.ifBlank { "(unnamed)" },
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                            )
+                            Text(c.name.ifBlank { "(unnamed)" }, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold))
                         }
                         Spacer(Modifier.height(2.dp))
                         Text("Qty: ${c.quantity}", style = MaterialTheme.typography.bodySmall)
-                        val reminder = c.reminderDays?.let { "Rem: ${it}d" } ?: "Rem: default"
-                        Text(reminder, style = MaterialTheme.typography.bodySmall)
+                        val dayMs = 24L*60*60*1000L
+                        val durationDays = c.shelfLifeDays ?: defaultDays
+                        val targetAt = c.createdAt + durationDays * dayMs
+                        val remaining = (targetAt - now) / dayMs
+                        val remLabel = when {
+                            remaining < 0 -> "Expired ${-remaining}d ago"
+                            remaining == 0L -> "Expires today"
+                            else -> "${remaining}d remaining"
+                        }
+                        Text(remLabel, style = MaterialTheme.typography.bodySmall)
+                        c.reminderAt?.let { ra ->
+                            val rd = (ra - now)/dayMs
+                            val alertLabel = if (rd < 0) "Alert overdue" else if (rd==0L) "Alert today" else "Alert in ${rd}d"
+                            Text(alertLabel, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Text("Scanned: ${formatFullDate(c.createdAt)}", style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(2.dp))
-                        // Compact meta line: show uuid snippet & textual status (for accessibility)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(c.status.name, style = MaterialTheme.typography.labelSmall)
                             Spacer(Modifier.width(8.dp))
@@ -545,6 +472,21 @@ private fun rel(diffMillis: Long): String {
     return if (diffMillis < 0) "${days}d overdue" else if (days==0L) "<1d" else "in ${days}d"
 }
 
+private fun formatFullDate(epochMillis: Long): String {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
+    val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+    val year = cal.get(java.util.Calendar.YEAR)
+    val monthName = java.text.DateFormatSymbols().months[cal.get(java.util.Calendar.MONTH)]
+    val suffix = when {
+        day in 11..13 -> "th"
+        day % 10 == 1 -> "st"
+        day % 10 == 2 -> "nd"
+        day % 10 == 3 -> "rd"
+        else -> "th"
+    }
+    return "${day}${suffix} ${monthName} ${year}"
+}
+
 @Composable
 private fun BuildFooter() {
     val sha = BuildConfig.GIT_SHA
@@ -556,4 +498,63 @@ private fun BuildFooter() {
             Text(if (dirty) "DIRTY" else "", style = MaterialTheme.typography.labelSmall)
         }
     }
+}
+
+@Composable
+private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
+    val ui by vm.state.collectAsState()
+    var defaultDays by remember { mutableStateOf(ui.defaultReminderDays.toString()) }
+    var soon by remember { mutableStateOf(ui.expiringSoonDays.toString()) }
+    var critical by remember { mutableStateOf(ui.criticalDays.toString()) }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Settings") }, text = {
+        Column {
+            OutlinedTextField(value = defaultDays, onValueChange = { if (it.length<=3) defaultDays = it.filter(Char::isDigit) }, label = { Text("Default reminder days") }, singleLine = true)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = soon, onValueChange = { if (it.length<=3) soon = it.filter(Char::isDigit) }, label = { Text("Expiring soon threshold") }, singleLine = true)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(value = critical, onValueChange = { if (it.length<=3) critical = it.filter(Char::isDigit) }, label = { Text("Critical threshold") }, singleLine = true)
+            Spacer(Modifier.height(4.dp))
+            Text("Thresholds color the alert (not the shelf life) dot.", style = MaterialTheme.typography.bodySmall)
+        }
+    }, confirmButton = {
+        TextButton(onClick = {
+            defaultDays.toIntOrNull()?.let { vm.setDefaultReminderDays(it) }
+            soon.toIntOrNull()?.let { vm.setExpiringSoonDays(it) }
+            critical.toIntOrNull()?.let { vm.setCriticalDays(it) }
+            onClose()
+        }) { Text("Save") }
+    }, dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } })
+}
+
+@Composable
+private fun LabelPreviewDialog(container: Container, defaultShelfLifeDays: Int, onDismiss: () -> Unit) {
+    val shelfDays = container.shelfLifeDays ?: defaultShelfLifeDays
+    val dayMs = 24L*60*60*1000L
+    val expiry = container.createdAt + shelfDays * dayMs
+    val remaining = (expiry - System.currentTimeMillis()) / dayMs
+    val remLabel = when {
+        remaining < 0 -> "expired ${-remaining}d ago"
+        remaining == 0L -> "expires today"
+        else -> "${remaining}d remaining"
+    }
+    val shelfLabel = "Shelf life: ${shelfDays}d (${remLabel})"
+    val reminderLabel = container.reminderDays?.let { "Reminder: ${it}d" } ?: "Reminder: none"
+    val qrMatrix = remember(container.uuid) { QrCodeGenerator.matrix(QR_PREFIX + container.uuid, 256) }
+    val bmp = remember(qrMatrix) {
+        android.graphics.Bitmap.createBitmap(qrMatrix.size, qrMatrix.size, android.graphics.Bitmap.Config.ARGB_8888).apply {
+            for (y in 0 until qrMatrix.size) for (x in 0 until qrMatrix.size) {
+                setPixel(x, y, if (qrMatrix.get(x,y)) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
+            }
+        }
+    }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Label" }) }, text = {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Image(bmp.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(180.dp))
+            Spacer(Modifier.height(8.dp))
+            Text(shelfLabel, style = MaterialTheme.typography.bodySmall)
+            Text(reminderLabel, style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(4.dp))
+            Text("UUID: ${container.uuid}", style = MaterialTheme.typography.labelSmall)
+        }
+    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
 }
