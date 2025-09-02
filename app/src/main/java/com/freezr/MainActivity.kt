@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
+import kotlin.math.abs
 import androidx.compose.runtime.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -156,21 +157,35 @@ fun FreezrApp(vm: ContainerViewModel) {
                     text = {
                         Column {
                             Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
-                            Spacer(Modifier.height(8.dp))
+                            Spacer(Modifier.height(4.dp))
+                            val item = existing
+                            val now = System.currentTimeMillis()
+                            val reminderAt = item?.reminderAt
+                            val (label, color) = if (reminderAt != null) {
+                                val diff = reminderAt - now
+                                when {
+                                    diff < 0 -> rel(diff) to Color(0xFFC62828)
+                                    diff <= 7L*24*60*60*1000 -> rel(diff) to Color(0xFFF9A825)
+                                    else -> rel(diff) to Color(0xFF2E7D32)
+                                }
+                            } else "No reminder" to MaterialTheme.colorScheme.outline
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                // Colored status dot for intuitive visual cue
-                                val statusColor = Color(0xFF2E7D32) // ACTIVE green
-                                Box(
-                                    Modifier
-                                        .size(14.dp)
-                                        .background(statusColor, CircleShape)
-                                )
+                                Box(Modifier.size(14.dp).background(color, CircleShape))
                                 Spacer(Modifier.width(8.dp))
-                                Text("Active", style = MaterialTheme.typography.labelMedium)
+                                Text("Reminder: $label", style = MaterialTheme.typography.labelMedium)
+                            }
+                            if (reminderAt != null) {
+                                Spacer(Modifier.height(4.dp))
+                                TextButton(onClick = { vm.updateReminderAt(item!!.id, reminderAt + 7L*24*60*60*1000) }) { Text("Snooze +7d") }
                             }
                         }
                     },
-                    confirmButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") } }
+                    confirmButton = {
+                        Row { 
+                            TextButton(onClick = { existing?.let { vm.markUsed(it.id) }; vm.dismissScanDialog() }) { Text("Mark Used") }
+                            TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") }
+                        }
+                    }
                 )
                 ScanMode.HISTORICAL -> AlertDialog(
                     onDismissRequest = { vm.dismissScanDialog() },
@@ -460,12 +475,21 @@ private fun FilterUsedChip(show: Boolean, onToggle: () -> Unit) {
 private fun ContainerList(items: List<Container>, onMarkUsed: (Long) -> Unit, onDelete: (Long) -> Unit, onLabel: (Container) -> Unit) {
     LazyColumn(Modifier.fillMaxSize().padding(8.dp).testTag(UiTestTags.ContainerList)) {
         items(items, key = { it.id }) { c ->
-            val statusColor = when (c.status) {
-                Status.ACTIVE -> Color(0xFF2E7D32) // green 700
-                Status.USED -> Color(0xFFC62828)   // red 700
-                Status.UNUSED -> Color(0xFF607D8B) // blue grey 500 neutral placeholder
+            val now = System.currentTimeMillis()
+            val baseStatusColor = when (c.status) {
+                Status.ACTIVE -> Color(0xFF2E7D32)
+                Status.USED -> Color(0xFFC62828)
+                Status.UNUSED -> Color(0xFF607D8B)
                 Status.DELETED -> MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
             }
+            val statusColor = if (c.status == Status.ACTIVE && c.reminderAt != null) {
+                val diff = c.reminderAt - now
+                when {
+                    diff < 0 -> Color(0xFFC62828) // overdue
+                    diff <= 7L*24*60*60*1000 -> Color(0xFFF9A825) // soon
+                    else -> baseStatusColor
+                }
+            } else baseStatusColor
             ElevatedCard(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -513,6 +537,12 @@ private fun ContainerList(items: List<Container>, onMarkUsed: (Long) -> Unit, on
             }
         }
     }
+}
+
+private fun rel(diffMillis: Long): String {
+    val absMs = abs(diffMillis)
+    val days = absMs / (24L*60*60*1000)
+    return if (diffMillis < 0) "${days}d overdue" else if (days==0L) "<1d" else "in ${days}d"
 }
 
 @Composable

@@ -79,7 +79,7 @@ class ContainerViewModel @Inject constructor(
         // Cancel any reminder on the old container before reusing
         reminderScheduler.cancel(existing.id)
         val id = containers.reusePreserveUuid(existing.id, newName)
-        if (id > 0) scheduleReminder(id, null)
+    if (id > 0) scheduleReminder(id, null)
         _scanDialog.value = null
     }
 
@@ -149,6 +149,7 @@ class ContainerViewModel @Inject constructor(
 
     fun snooze(id: Long, days: Int = 7) = viewModelScope.launch { containers.snooze(id, days) }
     fun updateReminderDays(id: Long, days: Int) = viewModelScope.launch { containers.updateReminderDays(id, days) }
+    fun updateReminderAt(id: Long, at: Long) = viewModelScope.launch { containers.updateReminderAt(id, at); reminderScheduler.schedule(id, at) }
 }
 
 data class ContainerUiState(
