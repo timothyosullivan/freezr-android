@@ -86,6 +86,8 @@ class ContainerViewModel @Inject constructor(
         _scanDialog.value = null
     }
 
+    // Placeholder generation removed from printing flow: labels are now purely physical until scanned.
+
     /** Claim an UNUSED placeholder scanned label */
     fun claimFromScan(name: String, reminderDays: Int? = null) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
@@ -102,6 +104,7 @@ class ContainerViewModel @Inject constructor(
         val triggerAt = System.currentTimeMillis() + days * 24L * 60L * 60L * 1000L
         reminderScheduler.schedule(id, triggerAt)
     }
+    // Removed generatePlaceholders() – labels for printing are now ephemeral and not inserted until scan claim.
     
     // Legacy path (may be removed when UI no longer calls it); only valid for UNKNOWN mode where we create new row from scanned uuid
     fun createFromScan(name: String, reminderDays: Int? = null) = viewModelScope.launch {

@@ -10,6 +10,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.platform.testTag
@@ -60,6 +62,7 @@ fun FreezrApp(vm: ContainerViewModel) {
         }
     ) { padding ->
     Column(Modifier.padding(padding).testTag(UiTestTags.RootColumn)) {
+            PlaceholderPrintDialog(vm) {}
             if (showScan) {
                 ScanScreen(onClose = { showScan = false }, onResult = { uuid ->
                     showScan = false
@@ -176,7 +179,7 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
             Box {
                 TextButton(onClick = { overflow = true }) { Text("⋮") }
                 DropdownMenu(expanded = overflow, onDismissRequest = { overflow = false }) {
-                    DropdownMenuItem(
+            DropdownMenuItem(
                         text = {
                             Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                                 Icon(painter = androidx.compose.ui.res.painterResource(id = R.drawable.ic_print), contentDescription = null)
@@ -185,19 +188,8 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
                         },
                         onClick = {
                             overflow = false
-                            val labels = state.items.filter { it.status == Status.ACTIVE }.take(40).map { c ->
-                                LabelPdfGenerator.Label(title = c.name.ifBlank { c.uuid.take(6) }, uuid = c.uuid)
-                            }
-                            if (labels.isNotEmpty()) {
-                                val file = LabelPdfGenerator.generate(contextLocal, labels, "labels.pdf")
-                                val uri = FileProvider.getUriForFile(contextLocal, contextLocal.packageName + ".fileprovider", file)
-                                val intent = Intent(Intent.ACTION_SEND).apply {
-                                    type = "application/pdf"
-                                    putExtra(Intent.EXTRA_STREAM, uri)
-                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                }
-                                contextLocal.startActivity(Intent.createChooser(intent, "Share labels PDF"))
-                            }
+                // Dialog will be triggered via shared state below
+                PlaceholderPrintController.open()
                         }
                     )
             DropdownMenuItem(
@@ -216,6 +208,54 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
             }
         },
         modifier = Modifier.testTag(UiTestTags.TopBar)
+    )
+}
+
+// Simple singleton holder for opening placeholder generation dialog without prop-drilling
+private object PlaceholderPrintController { var open by mutableStateOf(false); fun open() { open = true } fun close() { open = false } }
+
+@Composable
+private fun PlaceholderPrintDialog(vm: ContainerViewModel, onDismiss: () -> Unit) {
+    var countText by remember { mutableStateOf("20") }
+    var isGenerating by remember { mutableStateOf(false) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    if (!PlaceholderPrintController.open) return
+    AlertDialog(
+        onDismissRequest = { if (!isGenerating) { PlaceholderPrintController.close(); onDismiss() } },
+        title = { Text("Generate Labels") },
+        text = {
+            Column {
+                Text("Enter how many blank labels to print. They become containers only when scanned & claimed.")
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = countText, onValueChange = { if (it.length <= 3) countText = it.filter { ch -> ch.isDigit() } }, label = { Text("Count") })
+            }
+        },
+        confirmButton = {
+            val count = countText.toIntOrNull() ?: 0
+            val scope = rememberCoroutineScope()
+            TextButton(enabled = !isGenerating && count in 1..200, onClick = {
+                isGenerating = true
+                scope.launch(Dispatchers.Default) {
+                    val labels = List(count) {
+                        val uuid = java.util.UUID.randomUUID().toString()
+                        LabelPdfGenerator.Label(title = uuid.take(6), uuid = uuid)
+                    }
+                    val file = LabelPdfGenerator.generate(ctx, labels, "blank_labels.pdf")
+                    withContext(Dispatchers.Main) {
+                        isGenerating = false
+                        PlaceholderPrintController.close(); onDismiss()
+                        val uri = FileProvider.getUriForFile(ctx, ctx.packageName + ".fileprovider", file)
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        ctx.startActivity(Intent.createChooser(intent, "Share labels PDF"))
+                    }
+                }
+            }) { Text(if (isGenerating) "Working..." else "Generate") }
+        },
+        dismissButton = { TextButton(enabled = !isGenerating, onClick = { PlaceholderPrintController.close(); onDismiss() }) { Text("Cancel") } }
     )
 }
 
