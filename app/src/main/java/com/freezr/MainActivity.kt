@@ -34,6 +34,8 @@ import com.google.mlkit.vision.barcode.common.Barcode
 import java.util.concurrent.Executors
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.toArgb
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -215,6 +217,9 @@ private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
 private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     var detected by remember { mutableStateOf<String?>(null) }
+    var torchOn by remember { mutableStateOf(false) }
+    var paused by remember { mutableStateOf(false) }
+    var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     LaunchedEffect(detected) { detected?.let { onResult(it) } }
     Box(Modifier.fillMaxSize()) {
     AndroidView(factory = { ctx: android.content.Context ->
@@ -228,6 +233,7 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                 val analyzer = ImageAnalysis.Builder().setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST).build()
                 val scanner = BarcodeScanning.getClient()
                 analyzer.setAnalyzer(analysisExecutor) { imageProxy ->
+                    if (paused || detected != null) { imageProxy.close(); return@setAnalyzer }
                     val mediaImage = imageProxy.image
                     if (mediaImage != null) {
                         val rotation = imageProxy.imageInfo.rotationDegrees
@@ -246,14 +252,37 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                 }
                 try {
                     provider.unbindAll()
-                    provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analyzer)
+                    val cam = provider.bindToLifecycle(lifecycleOwner, CameraSelector.DEFAULT_BACK_CAMERA, preview, analyzer)
+                    cameraRef = cam
+                    if (torchOn) cam.cameraControl.enableTorch(true)
                 } catch (_: Exception) { }
             }, mainExecutor)
             previewView
         }, modifier = Modifier.fillMaxSize())
+        // Framing overlay
+        val guideSize = 220.dp
+        val frameColor = MaterialTheme.colorScheme.primary // capture outside draw scope
+        Box(
+            Modifier
+                .align(Alignment.Center)
+                .size(guideSize)
+                .drawBehind {
+                    val strokePx = 4.dp.toPx()
+                    drawRoundRect(
+                        color = frameColor,
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(16f,16f),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(width = strokePx)
+                    )
+                }
+        )
         Surface(tonalElevation = 2.dp, shape = MaterialTheme.shapes.small, modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onClose) { Text("Close") }
+                TextButton(onClick = {
+                    torchOn = !torchOn
+                    cameraRef?.cameraControl?.enableTorch(torchOn)
+                }) { Text(if (torchOn) "Torch Off" else "Torch On") }
+                TextButton(onClick = { paused = !paused }) { Text(if (paused) "Resume" else "Pause") }
                 TextButton(onClick = { if (detected == null) detected = "TEST-UUID-INJECT" }) { Text("Inject Test QR") }
             }
         }

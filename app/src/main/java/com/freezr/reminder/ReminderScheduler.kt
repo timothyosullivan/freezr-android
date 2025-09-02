@@ -1,6 +1,11 @@
 package com.freezr.reminder
 
 import android.content.Context
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.work.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -32,8 +37,26 @@ class ReminderWorker @AssistedInject constructor(
     @Assisted params: WorkerParameters,
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
-        // TODO: Hook up notification in future iteration.
+        val id = inputData.getLong(KEY_ID, -1)
+        ensureChannel()
+        val notif = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_popup_reminder)
+            .setContentTitle("Freezr Reminder")
+            .setContentText("Check item #$id in your freezer")
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .build()
+        NotificationManagerCompat.from(applicationContext).notify((id % Int.MAX_VALUE).toInt(), notif)
         return Result.success()
     }
     companion object { const val KEY_ID = "containerId" }
+    private fun ensureChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            val nm = applicationContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (nm.getNotificationChannel(CHANNEL_ID) == null) {
+                nm.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Freezr Reminders", NotificationManager.IMPORTANCE_DEFAULT))
+            }
+        }
+    }
 }
+
+private const val CHANNEL_ID = "freezr_reminders"
