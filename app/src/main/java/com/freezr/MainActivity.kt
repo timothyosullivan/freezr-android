@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -70,8 +72,9 @@ fun FreezrApp(vm: ContainerViewModel) {
     val scanDialog by vm.scanDialog.collectAsState()
 
     var labelTarget by remember { mutableStateOf<com.freezr.data.model.Container?>(null) }
+    var settingsOpen by remember { mutableStateOf(false) }
     Scaffold(
-    topBar = { TopBar(state, onSort = vm::setSort, onToggleUsed = { vm.setShowUsed(!state.showUsed) }, onScan = { showScan = true }) },
+    topBar = { TopBar(state, onSort = vm::setSort, onToggleUsed = { vm.setShowUsed(!state.showUsed) }, onScan = { showScan = true }, onOpenSettings = { settingsOpen = true }) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = {
             // Only creation path is scanning; FAB opens scanner
@@ -101,6 +104,7 @@ fun FreezrApp(vm: ContainerViewModel) {
             }
             BuildFooter()
         }
+        if (settingsOpen) SettingsDialog(vm = vm, onClose = { settingsOpen = false })
         scanDialog?.let { sd ->
             val existing = sd.existing
             var name by remember(sd.uuid) { mutableStateOf(existing?.name ?: "") }
@@ -210,7 +214,7 @@ fun FreezrApp(vm: ContainerViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUsed: () -> Unit, onScan: () -> Unit) {
+private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUsed: () -> Unit, onScan: () -> Unit, onOpenSettings: () -> Unit) {
     val contextLocal = androidx.compose.ui.platform.LocalContext.current
     var overflow by remember { mutableStateOf(false) }
     TopAppBar(
@@ -248,12 +252,43 @@ private fun TopBar(state: ContainerUiState, onSort: (SortOrder) -> Unit, onToggl
                 onScan()
                         }
                     )
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                                Icon(imageVector = Icons.Filled.Settings, contentDescription = null)
+                                Spacer(Modifier.width(8.dp)); Text("Settings")
+                            }
+                        },
+                        onClick = { overflow = false; onOpenSettings() }
+                    )
                 }
             }
         },
         modifier = Modifier.testTag(UiTestTags.TopBar)
     )
 }
+
+@Composable
+private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
+    val state by vm.state.collectAsState()
+    var daysText by remember(state.defaultReminderDays) { mutableStateOf(state.defaultReminderDays.toString()) }
+    AlertDialog(onDismissRequest = onClose, title = { Text("Settings") }, text = {
+        Column { 
+            Text("Default reminder days")
+            Spacer(Modifier.height(4.dp))
+            OutlinedTextField(value = daysText, onValueChange = { if (it.length <=3) daysText = it.filter { ch -> ch.isDigit() } }, singleLine = true, label = { Text("Days") })
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Used as the default reminder window for new items when you scan a label (or reuse one) and haven't set a custom reminder.",
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
+    }, confirmButton = {
+        val days = daysText.toIntOrNull() ?: -1
+        TextButton(enabled = days in 1..365, onClick = { vm.setDefaultReminderDays(days); onClose() }) { Text("Save") }
+    }, dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } })
+}
+
 
 @Composable
 private fun ReminderFilterMenu(current: ReminderFilter) {
