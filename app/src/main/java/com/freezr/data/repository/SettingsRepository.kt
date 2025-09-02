@@ -12,4 +12,6 @@ class SettingsRepository(private val dao: SettingsDao) {
         dao.upsert(current.copy(sortOrder = sort))
     suspend fun updateShowUsed(show: Boolean, current: Settings) =
         dao.upsert(current.copy(showUsed = show))
+    suspend fun updateDefaultReminderDays(days: Int, current: Settings) =
+        dao.upsert(current.copy(defaultReminderDays = days))
 }

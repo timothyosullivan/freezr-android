@@ -37,7 +37,9 @@ class ContainerViewModel @Inject constructor(
                 ContainerUiState(
                     items = filtered,
                     sortOrder = s.sortOrder,
-            showUsed = s.showUsed
+                    showUsed = s.showUsed,
+                    filter = _filter.value,
+                    defaultReminderDays = s.defaultReminderDays
                 )
             }
         }
@@ -130,6 +132,10 @@ class ContainerViewModel @Inject constructor(
         if (current.showUsed != show) settingsRepo.updateShowUsed(show, current)
     }
     fun setReminderFilter(filter: ReminderFilter) { _filter.value = filter }
+    fun setDefaultReminderDays(days: Int) = viewModelScope.launch {
+        val current = settings.value
+        if (current.defaultReminderDays != days) settingsRepo.updateDefaultReminderDays(days, current)
+    }
 
     private fun applyReminderFilter(list: List<Container>, filter: ReminderFilter): List<Container> {
         if (filter == ReminderFilter.NONE) return list
@@ -149,7 +155,8 @@ data class ContainerUiState(
     val items: List<Container> = emptyList(),
     val sortOrder: SortOrder = SortOrder.CREATED_DESC,
     val showUsed: Boolean = false,
-    val filter: ReminderFilter = ReminderFilter.NONE
+    val filter: ReminderFilter = ReminderFilter.NONE,
+    val defaultReminderDays: Int = 60
 )
 
 data class ScanDialogState(val uuid: String, val existing: Container?)
