@@ -83,39 +83,64 @@ fun FreezrApp(vm: ContainerViewModel) {
             BuildFooter()
         }
         scanDialog?.let { sd ->
-            var name by remember(sd.uuid) { mutableStateOf(sd.existing?.name ?: "") }
             val existing = sd.existing
-            AlertDialog(
-                onDismissRequest = { vm.dismissScanDialog() },
-                title = { Text(if (existing == null) "New Scanned Item" else "Scanned Existing") },
-                text = {
-                    Column {
-                        Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text(if (existing == null) "Name" else "Reuse Name") })
-                        if (existing != null) {
-                            Spacer(Modifier.height(4.dp))
-                            Text("Original: ${existing.name}", style = MaterialTheme.typography.labelSmall)
+            var name by remember(sd.uuid) { mutableStateOf(existing?.name ?: "") }
+            when (sd.mode) {
+                ScanMode.UNKNOWN -> AlertDialog(
+                    onDismissRequest = { vm.dismissScanDialog() },
+                    title = { Text("Unrecognized Label") },
+                    text = { Text("This QR isn't a known Freezr label. Print labels inside the app first.") },
+                    confirmButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") } }
+                )
+                ScanMode.UNUSED -> AlertDialog(
+                    onDismissRequest = { vm.dismissScanDialog() },
+                    title = { Text("Claim Label") },
+                    text = {
+                        Column {
+                            Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Description") })
                         }
-                    }
-                },
-                confirmButton = {
-                    if (existing == null) {
+                    },
+                    confirmButton = {
                         TextButton(enabled = name.isNotBlank(), onClick = {
-                            vm.createFromScan(name.trim())
-                            scope.launch { snackbarHostState.showSnackbar("Created from scan") }
-                        }) { Text("Create") }
-                    } else {
+                            vm.claimFromScan(name.trim())
+                            scope.launch { snackbarHostState.showSnackbar("Label claimed") }
+                        }) { Text("Save") }
+                    },
+                    dismissButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") } }
+                )
+                ScanMode.ACTIVE -> AlertDialog(
+                    onDismissRequest = { vm.dismissScanDialog() },
+                    title = { Text(existing?.name ?: "Item") },
+                    text = {
+                        Column {
+                            Text("UUID: ${sd.uuid}", style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(4.dp))
+                            Text("Status: ACTIVE", style = MaterialTheme.typography.labelSmall)
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Close") } }
+                )
+                ScanMode.HISTORICAL -> AlertDialog(
+                    onDismissRequest = { vm.dismissScanDialog() },
+                    title = { Text("Reuse Label") },
+                    text = {
+                        Column {
+                            Text("Archived/Used label: ${existing?.name}", style = MaterialTheme.typography.bodySmall)
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("New Description (optional)") })
+                        }
+                    },
+                    confirmButton = {
                         TextButton(onClick = {
                             vm.reuseFromScan(name.takeIf { it.isNotBlank() })
-                            scope.launch { snackbarHostState.showSnackbar("Reused: old archived") }
+                            scope.launch { snackbarHostState.showSnackbar("Reused label") }
                         }) { Text("Reuse") }
-                    }
-                },
-                dismissButton = {
-                    TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") }
-                }
-            )
+                    },
+                    dismissButton = { TextButton(onClick = { vm.dismissScanDialog() }) { Text("Cancel") } }
+                )
+            }
         }
         labelTarget?.let { c ->
             AlertDialog(onDismissRequest = { labelTarget = null }, confirmButton = {

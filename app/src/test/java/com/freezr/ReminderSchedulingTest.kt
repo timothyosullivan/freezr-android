@@ -37,7 +37,9 @@ class ReminderSchedulingTest {
 
     private class CapturingScheduler: com.freezr.reminder.ReminderScheduler {
         val scheduled = mutableListOf<Pair<Long,Long>>()
+        val canceled = mutableListOf<Long>()
         override fun schedule(containerId: Long, triggerAtMillis: Long) { scheduled += containerId to triggerAtMillis }
+        override fun cancel(containerId: Long) { canceled += containerId }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

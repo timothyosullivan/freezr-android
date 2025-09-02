@@ -55,6 +55,7 @@ class ContainerViewModelTest {
     ): Triple<ContainerViewModel, FakeContainerDao, FakeSettingsDao> {
         val scheduler = object : com.freezr.reminder.ReminderScheduler {
             override fun schedule(containerId: Long, triggerAtMillis: Long) { /* no-op for unit test */ }
+            override fun cancel(containerId: Long) { /* no-op */ }
         }
         val vm = ContainerViewModel(
             ContainerRepository(containerDao),

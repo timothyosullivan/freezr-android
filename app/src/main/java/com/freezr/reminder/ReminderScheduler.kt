@@ -14,6 +14,7 @@ import java.util.concurrent.TimeUnit
 /** Simple abstraction for scheduling a one-time reminder for a container. */
 interface ReminderScheduler {
     fun schedule(containerId: Long, triggerAtMillis: Long)
+    fun cancel(containerId: Long)
 }
 
 class WorkManagerReminderScheduler(private val workManager: WorkManager): ReminderScheduler {
@@ -29,6 +30,9 @@ class WorkManagerReminderScheduler(private val workManager: WorkManager): Remind
             ExistingWorkPolicy.REPLACE,
             req
         )
+    }
+    override fun cancel(containerId: Long) {
+        workManager.cancelUniqueWork("reminder-container-$containerId")
     }
 }
 
