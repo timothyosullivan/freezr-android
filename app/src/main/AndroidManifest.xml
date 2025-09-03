@@ -11,16 +11,13 @@
     android:icon="@drawable/ic_fridge"
     android:roundIcon="@drawable/ic_fridge"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
-        <activity android:name=".SplashActivity"
-            android:exported="true"
-            android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+    android:theme="@style/Theme.Freezr.NoActionBar">
+        <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-    <activity android:name=".MainActivity" android:exported="true" />
         <receiver android:name=".reminder.ReminderActionReceiver" android:exported="false" />
     <receiver android:name=".reminder.ReminderAlarmReceiver" android:exported="false" />
     <receiver android:name=".reminder.BootRescheduleReceiver" android:exported="true">
