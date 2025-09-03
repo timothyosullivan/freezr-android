@@ -53,11 +53,25 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         maybeRequestNotificationPermission()
+        maybePromptExactAlarm()
     maybeRequestCameraPermission()
         val startIntent = intent
         setContent {
             LaunchedEffect(startIntent) { startIntent?.let { handleAppIntent(it) } }
             FreezrApp(vm)
+        }
+    }
+    private fun maybePromptExactAlarm() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
+            val am = getSystemService(android.app.AlarmManager::class.java)
+            if (!am.canScheduleExactAlarms()) {
+                // Launch settings so user can enable exact alarms if they want reliable reminders
+                try {
+                    val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)
+                    intent.data = android.net.Uri.parse("package:" + packageName)
+                    startActivity(intent)
+                } catch (_: Exception) { /* ignore */ }
+            }
         }
     }
     private fun handleAppIntent(intent: android.content.Intent) {

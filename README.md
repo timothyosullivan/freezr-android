@@ -3,12 +3,24 @@
 Minimal rebuilt version with Room, Hilt, Jetpack Compose list (add/archive/delete/undo, sort, archived toggle).
 
 ## Documentation
-- Product Requirements: `docs/PRODUCT_REQUIREMENTS.md`
-- Collaboration / AI Pairing Prompt: `docs/COLLAB_PROMPT.md`
-- Engineering Backlog: `docs/BACKLOG.md`
 
 ## Commit Policy
 Only commit after emulator validation of the change.
+
+
+## Release Checklist
+
+1. Update `versionCode` / `versionName` in `app/build.gradle.kts`.
+2. Run a clean release build:
+	- `./gradlew clean :app:bundleRelease`
+3. Test reminder delivery with screen off (exact alarm enabled & disabled cases).
+4. Verify database migrations by installing an older debug build, creating data, then upgrading to the new build.
+5. Confirm no unintended exported components in `AndroidManifest.xml`.
+6. Review notification channel name & importance.
+7. Validate camera & notification permissions flows on API 24, 30, 34.
+8. Generate Play Store assets (512px icon, feature graphic) if changed.
+9. Attach a concise privacy policy (no data leaves device) to Play listing.
+10. Tag release in git: `git tag v1.0.0 && git push --tags`.
 
 ## Validation Workflow
 1. Implement change.
