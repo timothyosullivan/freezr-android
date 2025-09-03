@@ -61,8 +61,10 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun handleAppIntent(intent: android.content.Intent) {
+        android.util.Log.d("Freezr","handleAppIntent action=" + intent.action + " extras=" + intent.extras)
         if (intent.action == "com.freezr.ACTION_OPEN_CONTAINER") {
             val id = intent.getLongExtra("containerId", -1L)
+            android.util.Log.d("Freezr","Opening container from intent id="+id)
             if (id > 0) vm.openScanDialogForId(id)
         }
     }
@@ -779,7 +781,7 @@ private fun LabelPreviewDialog(container: Container, defaultShelfLifeDays: Int, 
     }
     val owner = androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current
     val vm: ContainerViewModel? = owner?.let { androidx.lifecycle.viewmodel.compose.viewModel(it) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Details" }) }, text = {
+    AlertDialog(onDismissRequest = { android.util.Log.d("Freezr","Details dialog dismissed"); onDismiss() }, title = { Text(container.name.ifBlank { "Details" }) }, text = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(bmp.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(180.dp))
             Spacer(Modifier.height(8.dp))
@@ -789,7 +791,7 @@ private fun LabelPreviewDialog(container: Container, defaultShelfLifeDays: Int, 
             TextButton(onClick = { showDateTime = true }) { Text(selectedDateMidnight?.let { "Change reminder (${formatShortDate(it)} %02d:%02d".format(hour, minute) + ")" } ?: "Set reminder date & time") }
             Text("UUID: ${container.uuid}", style = MaterialTheme.typography.labelSmall)
         }
-    }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
+    }, confirmButton = { TextButton(onClick = { android.util.Log.d("Freezr","Details dialog Close clicked"); onDismiss() }) { Text("Close") } })
     if (showDateTime) {
         DateTimePickerDialog(initialDateMidnight = selectedDateMidnight, initialHour = hour, initialMinute = minute, onDismiss = { showDateTime = false }) { d, h, m ->
             selectedDateMidnight = d; hour = h; minute = m; showDateTime = false

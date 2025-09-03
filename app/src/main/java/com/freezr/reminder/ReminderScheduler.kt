@@ -10,6 +10,10 @@ import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
 import androidx.room.Room
 import com.freezr.data.database.AppDatabase
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import android.app.TaskStackBuilder
 import androidx.work.*
 import dagger.assisted.Assisted
@@ -39,24 +43,36 @@ class WorkManagerReminderScheduler @Inject constructor(
         workManager.enqueueUniqueWork("reminder-container-$containerId", ExistingWorkPolicy.REPLACE, req)
 
         // Also schedule an exact alarm to wake app if killed
-    val am = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val am = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        // Try to schedule an exact alarm; fall back gracefully if permission not granted.
     val intent = Intent(appCtx, ReminderAlarmReceiver::class.java).apply {
             putExtra(ReminderWorker.KEY_ID, containerId)
         }
         val flags = FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) FLAG_IMMUTABLE else 0)
-    val pi = PendingIntent.getBroadcast(appCtx, containerId.toInt(), intent, flags)
-        if (Build.VERSION.SDK_INT >= 23) {
-            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
-        } else {
-            am.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+        val pi = PendingIntent.getBroadcast(appCtx, containerId.toInt(), intent, flags)
+        try {
+            val canExact = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) am.canScheduleExactAlarms() else true
+            if (canExact) {
+                if (Build.VERSION.SDK_INT >= 23) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                } else {
+                    am.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+                }
+            } else {
+                // Fallback to inexact (WorkManager handles reliability; this just adds a wakeup hint)
+                am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+            }
+        } catch (se: SecurityException) {
+            // Permission for exact alarms not granted (Android 12+). Fallback to inexact.
+            try { am.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi) } catch (_: Exception) {}
         }
     }
     override fun cancel(containerId: Long) {
-    workManager.cancelUniqueWork("reminder-container-$containerId")
-    val am = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-    val intent = Intent(appCtx, ReminderAlarmReceiver::class.java)
+        workManager.cancelUniqueWork("reminder-container-$containerId")
+        val am = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(appCtx, ReminderAlarmReceiver::class.java)
         val flags = FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) FLAG_IMMUTABLE else 0)
-    val pi = PendingIntent.getBroadcast(appCtx, containerId.toInt(), intent, flags)
+        val pi = PendingIntent.getBroadcast(appCtx, containerId.toInt(), intent, flags)
         am.cancel(pi)
     }
 }
@@ -65,15 +81,21 @@ class ReminderAlarmReceiver: android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getLongExtra(ReminderWorker.KEY_ID, -1)
         if (id <= 0) return
-        // Directly deliver notification to avoid WorkManager doze delays when device is idle.
-        deliverReminderNotification(context.applicationContext, id)
+        // Use goAsync + coroutine to avoid blocking main thread & Room main-thread exception.
+        val pending = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                deliverReminderNotification(context.applicationContext, id)
+            } finally {
+                pending.finish()
+            }
+        }
     }
 }
 
-private fun deliverReminderNotification(ctx: Context, id: Long) {
-    // Build / reuse DB (lightweight access) – using Room directly (could swap to provider if added)
-    val db = Room.databaseBuilder(ctx, AppDatabase::class.java, "app.db").fallbackToDestructiveMigration().build()
-    val container = try { kotlinx.coroutines.runBlocking { db.containerDao().getById(id) } } catch (_: Exception) { null }
+private suspend fun deliverReminderNotification(ctx: Context, id: Long) {
+    val db = AppDbProvider.db(ctx)
+    val container = try { db.containerDao().getById(id) } catch (_: Exception) { null }
     // Channel
     if (Build.VERSION.SDK_INT >= 26) {
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -118,7 +140,7 @@ class ReminderWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
     val id = inputData.getLong(KEY_ID, -1)
-    if (id > 0) deliverReminderNotification(applicationContext, id)
+    if (id > 0) withContext(Dispatchers.IO) { deliverReminderNotification(applicationContext, id) }
         return Result.success()
     }
     companion object { const val KEY_ID = "containerId" }
