@@ -27,7 +27,7 @@ class ReminderActionReceiver: BroadcastReceiver() {
                 if (isActive) {
                     val newAt = System.currentTimeMillis() + 7L * 24 * 60 * 60 * 1000
                     db.openHelper.writableDatabase.execSQL("UPDATE containers SET reminderAt=$newAt WHERE id=$id")
-                    WorkManagerReminderScheduler(WorkManager.getInstance(context)).schedule(id, newAt)
+                    WorkManagerReminderScheduler(context.applicationContext, WorkManager.getInstance(context)).schedule(id, newAt)
                 }
             }
         }

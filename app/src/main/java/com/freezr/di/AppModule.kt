@@ -36,5 +36,5 @@ object AppModule {
 
     @Provides @Singleton
     fun reminderScheduler(app: Application): ReminderScheduler =
-        WorkManagerReminderScheduler(WorkManager.getInstance(app))
+        WorkManagerReminderScheduler(app, WorkManager.getInstance(app))
 }

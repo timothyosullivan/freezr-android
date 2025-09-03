@@ -15,29 +15,61 @@ import androidx.work.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import java.util.concurrent.TimeUnit
+import android.app.AlarmManager
+import android.app.PendingIntent.FLAG_IMMUTABLE
+import android.app.PendingIntent.FLAG_UPDATE_CURRENT
+import javax.inject.Inject
+import dagger.hilt.android.qualifiers.ApplicationContext
 
 /** Simple abstraction for scheduling a one-time reminder for a container. */
-interface ReminderScheduler {
-    fun schedule(containerId: Long, triggerAtMillis: Long)
-    fun cancel(containerId: Long)
-}
+interface ReminderScheduler { fun schedule(containerId: Long, triggerAtMillis: Long); fun cancel(containerId: Long) }
 
-class WorkManagerReminderScheduler(private val workManager: WorkManager): ReminderScheduler {
+class WorkManagerReminderScheduler @Inject constructor(
+    @ApplicationContext private val appCtx: Context,
+    private val workManager: WorkManager
+): ReminderScheduler {
     override fun schedule(containerId: Long, triggerAtMillis: Long) {
+        // Keep legacy WorkManager scheduling as a safety net
         val delay = (triggerAtMillis - System.currentTimeMillis()).coerceAtLeast(0)
         val req = OneTimeWorkRequestBuilder<ReminderWorker>()
             .setInitialDelay(delay, TimeUnit.MILLISECONDS)
             .setInputData(workDataOf(ReminderWorker.KEY_ID to containerId))
             .addTag("reminder-container-$containerId")
             .build()
-        workManager.enqueueUniqueWork(
-            "reminder-container-$containerId",
-            ExistingWorkPolicy.REPLACE,
-            req
-        )
+        workManager.enqueueUniqueWork("reminder-container-$containerId", ExistingWorkPolicy.REPLACE, req)
+
+        // Also schedule an exact alarm to wake app if killed
+    val am = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val intent = Intent(appCtx, ReminderAlarmReceiver::class.java).apply {
+            putExtra(ReminderWorker.KEY_ID, containerId)
+        }
+        val flags = FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) FLAG_IMMUTABLE else 0)
+    val pi = PendingIntent.getBroadcast(appCtx, containerId.toInt(), intent, flags)
+        if (Build.VERSION.SDK_INT >= 23) {
+            am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+        } else {
+            am.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pi)
+        }
     }
     override fun cancel(containerId: Long) {
-        workManager.cancelUniqueWork("reminder-container-$containerId")
+    workManager.cancelUniqueWork("reminder-container-$containerId")
+    val am = appCtx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+    val intent = Intent(appCtx, ReminderAlarmReceiver::class.java)
+        val flags = FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 23) FLAG_IMMUTABLE else 0)
+    val pi = PendingIntent.getBroadcast(appCtx, containerId.toInt(), intent, flags)
+        am.cancel(pi)
+    }
+}
+
+class ReminderAlarmReceiver: android.content.BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val id = intent.getLongExtra(ReminderWorker.KEY_ID, -1)
+        if (id <= 0) return
+        // Delegate to worker logic by enqueuing immediate work to reuse DB + notification code
+        val req = OneTimeWorkRequestBuilder<ReminderWorker>()
+            .setInputData(workDataOf(ReminderWorker.KEY_ID to id))
+            .build()
+        WorkManager.getInstance(context).enqueue(req)
     }
 }
 

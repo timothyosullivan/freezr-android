@@ -641,11 +641,11 @@ private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
     var critical by remember { mutableStateOf(ui.criticalDays.toString()) }
     AlertDialog(onDismissRequest = onClose, title = { Text("Settings") }, text = {
         Column {
-            OutlinedTextField(value = defaultDays, onValueChange = { if (it.length<=3) defaultDays = it.filter(Char::isDigit) }, label = { Text("Default reminder days") }, singleLine = true)
+            OutlinedTextField(value = defaultDays, onValueChange = { if (it.length<=3) defaultDays = it.filter(Char::isDigit) }, label = { Text("Default shelf life (days)") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = soon, onValueChange = { if (it.length<=3) soon = it.filter(Char::isDigit) }, label = { Text("Expiring soon threshold") }, singleLine = true)
+            OutlinedTextField(value = soon, onValueChange = { if (it.length<=3) soon = it.filter(Char::isDigit) }, label = { Text("Expiring soon threshold (days)") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = critical, onValueChange = { if (it.length<=3) critical = it.filter(Char::isDigit) }, label = { Text("Critical threshold") }, singleLine = true)
+            OutlinedTextField(value = critical, onValueChange = { if (it.length<=3) critical = it.filter(Char::isDigit) }, label = { Text("Critical threshold (days)") }, singleLine = true)
             Spacer(Modifier.height(4.dp))
             Text("Thresholds color the alert (not the shelf life) dot.", style = MaterialTheme.typography.bodySmall)
         }
@@ -672,12 +672,14 @@ private fun UsageGuideDialog(onClose: () -> Unit) {
                     style = MaterialTheme.typography.titleLarge
                 )
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "The app that loves your freezer & loves your food",
-                    fontWeight = FontWeight.Bold,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    color = Color(0xFF2E7D32), // Green
-                )
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    Text(
+                        "The app that loves your freezer & loves your food",
+                        fontWeight = FontWeight.Bold,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = Color(0xFF2E7D32), // Green
+                    )
+                }
                 Spacer(Modifier.height(8.dp))
                 Text("Core Concepts", fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(4.dp))

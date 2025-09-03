@@ -13,7 +13,7 @@ class BootRescheduleReceiver: BroadcastReceiver() {
         val db = AppDbProvider.db(context)
         // naive query via rawQuery for ACTIVE items with future reminderAt
         db.openHelper.readableDatabase.query("SELECT id, reminderAt FROM containers WHERE status='ACTIVE' AND reminderAt IS NOT NULL AND reminderAt > strftime('%s','now')*1000").use { c ->
-            val scheduler = WorkManagerReminderScheduler(WorkManager.getInstance(context))
+            val scheduler = WorkManagerReminderScheduler(context.applicationContext, WorkManager.getInstance(context))
             while (c.moveToNext()) {
                 val id = c.getLong(0)
                 val at = c.getLong(1)
