@@ -667,12 +667,16 @@ private fun UsageGuideDialog(onClose: () -> Unit) {
         title = { Text("Usage Guide") },
         text = {
             Column(Modifier.verticalScroll(scrollState).fillMaxWidth()) {
-                Text("Welcome to Freezr!", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Welcome to Freezr!",
+                    style = MaterialTheme.typography.titleLarge
+                )
                 Spacer(Modifier.height(8.dp))
                 Text(
                     "The app that loves your freezer & loves your food",
                     fontWeight = FontWeight.Bold,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = Color(0xFF2E7D32), // Green
                 )
                 Spacer(Modifier.height(8.dp))
                 Text("Core Concepts", fontWeight = FontWeight.Bold)

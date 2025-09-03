@@ -65,7 +65,7 @@ private fun SplashScreen(onFinished: () -> Unit) {
         )
         Spacer(Modifier.height(24.dp))
         Text(
-            text = "Loving your freezer and your food",
+            text = "The app that loves your freezer & loves your food",
             color = Color(0xFF0A2A45),
             style = MaterialTheme.typography.titleMedium.copy(fontSize = 20.sp, fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center
