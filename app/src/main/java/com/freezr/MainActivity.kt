@@ -17,9 +17,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import kotlin.OptIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -88,11 +92,28 @@ private fun FreezrApp(vm: ContainerViewModel) {
     var showScan by remember { mutableStateOf(false) }
     val scanDialog by vm.scanDialog.collectAsState()
     var settingsOpen by remember { mutableStateOf(false) }
+    var guideOpen by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
     var labelPreview: Container? by remember { mutableStateOf(null) }
     var printing by remember { mutableStateOf(false) }
     var pendingPrintCount by remember { mutableStateOf<Int?>(null) }
     Scaffold(
-        topBar = { TopBar(ui, onSort = vm::setSort, onToggleUsed = { vm.setShowUsed(!ui.showUsed) }, onOpenSettings = { settingsOpen = true }, onPrint = { printing = true }) },
+        topBar = { TopBar(
+            ui,
+            onSort = vm::setSort,
+            onToggleUsed = { vm.setShowUsed(!ui.showUsed) },
+            onOpenSettings = { settingsOpen = true },
+            onOpenGuide = { guideOpen = true },
+            onOpenCoffee = {
+                try {
+                    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("https://www.buymeacoffee.com/zippee"))
+                    context.startActivity(intent)
+                } catch (_: Exception) {
+                    scope.launch { snackbarHostState.showSnackbar("Couldn't open browser") }
+                }
+            },
+            onPrint = { printing = true }
+        ) },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = { FloatingActionButton(onClick = { showScan = true }, modifier = Modifier.testTag(UiTestTags.FabAdd)) { Text("Scan") } }
     ) { padding ->
@@ -122,8 +143,8 @@ private fun FreezrApp(vm: ContainerViewModel) {
             }
             BuildFooter()
         }
-        if (settingsOpen) SettingsDialog(vm = vm, onClose = { settingsOpen = false })
-        val context = androidx.compose.ui.platform.LocalContext.current
+    if (settingsOpen) SettingsDialog(vm = vm, onClose = { settingsOpen = false })
+    if (guideOpen) UsageGuideDialog(onClose = { guideOpen = false })
         if (printing) PrintDialog(onDismiss = { printing = false }) { count ->
             printing = false
             pendingPrintCount = count
@@ -176,7 +197,15 @@ private fun FreezrApp(vm: ContainerViewModel) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TopBar(ui: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUsed: () -> Unit, onOpenSettings: () -> Unit, onPrint: () -> Unit) {
+private fun TopBar(
+    ui: ContainerUiState,
+    onSort: (SortOrder) -> Unit,
+    onToggleUsed: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenGuide: () -> Unit,
+    onOpenCoffee: () -> Unit,
+    onPrint: () -> Unit
+) {
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -196,6 +225,16 @@ private fun TopBar(ui: ContainerUiState, onSort: (SortOrder) -> Unit, onToggleUs
                         text = { Text("Settings") },
                         leadingIcon = { Icon(Icons.Default.Settings, contentDescription = null) },
                         onClick = { menu = false; onOpenSettings() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Usage Guide") },
+                        leadingIcon = { Icon(Icons.Default.Info, contentDescription = null) },
+                        onClick = { menu = false; onOpenGuide() }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Buy Me A Coffee") },
+                        leadingIcon = { Icon(Icons.Default.LocalCafe, contentDescription = null) },
+                        onClick = { menu = false; onOpenCoffee() }
                     )
                 }
             }
@@ -618,6 +657,83 @@ private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
             onClose()
         }) { Text("Save") }
     }, dismissButton = { TextButton(onClick = onClose) { Text("Cancel") } })
+}
+
+@Composable
+private fun UsageGuideDialog(onClose: () -> Unit) {
+    val scrollState = rememberScrollState()
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Usage Guide") },
+        text = {
+            Column(Modifier.verticalScroll(scrollState).fillMaxWidth()) {
+                Text("Welcome to Freezr!", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "The app that loves your freezer & loves your food",
+                    fontWeight = FontWeight.Bold,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                )
+                Spacer(Modifier.height(8.dp))
+                Text("Core Concepts", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Print blank QR labels, then scan to 'claim' them when you actually store an item.")
+                Bullet("Each label represents a container or frozen item. Scanning pulls up its current state.")
+                Bullet("You can set a shelf life (how long it's good) and an optional reminder (specific date + time).")
+                Spacer(Modifier.height(8.dp))
+                Text("Workflow", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("1. Tap Scan (FAB) to open the camera.")
+                Bullet("2. Point at a printed Freezr QR. If it's unused you'll Claim it; if it was used before you'll either view Active details or Reuse it.")
+                Bullet("3. During Claim you can: set a description, optional shelf life days, and pick a calendar date & time for a reminder.")
+                Bullet("4. Active items show status color based on time left vs thresholds (Settings lets you adjust 'expiring soon' & 'critical').")
+                Bullet("5. 'Details' shows the QR, shelf info, and lets you change the reminder date/time.")
+                Bullet("6. Mark an item Used when consumed. It stays in history (if Show Used toggled on).")
+                Spacer(Modifier.height(8.dp))
+                Text("Reminders", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Reminders are scheduled at an exact date & time you pick.")
+                Bullet("Notification opens directly to the item's dialog so you can update or mark it 'used'.")
+                Spacer(Modifier.height(8.dp))
+                Text("Shelf Life vs Reminder", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Shelf life: total expected freshness window (drives colored status dot).")
+                Bullet("Reminder: a separate early (or exact) nudge you choose. It does not change shelf life.")
+                Spacer(Modifier.height(8.dp))
+                Text("Status Colors", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Green: comfortably within shelf life.")
+                Bullet("Amber: within 'expiring soon' threshold.")
+                Bullet("Red: within 'critical' threshold or already past shelf life.")
+                Spacer(Modifier.height(8.dp))
+                Text("Printing Labels", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Open menu > Print to generate a PDF of blank QR codes. Cut & affix to containers.")
+                Bullet("These start as UNUSED until first claim after scanning.")
+                Spacer(Modifier.height(8.dp))
+                Text("Sorting & Filtering", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Use the sort menu to switch between Newest/Oldest or Name A→Z/Z→A.")
+                Bullet("Toggle 'Show Used' to reveal history. Deleted items are hidden after undo window.")
+                Spacer(Modifier.height(8.dp))
+                Text("Tips", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Bullet("Set shelf life once; tweak reminders as plans change.")
+                Bullet("Use 'Details' for quick reminder adjustments without re‑scanning.")
+                Spacer(Modifier.height(12.dp))
+                Text("You're set! Scan your first label or print some to get started.")
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
+}
+
+@Composable
+private fun Bullet(text: String) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+        Text("•", modifier = Modifier.width(16.dp))
+        Text(text, style = MaterialTheme.typography.bodySmall)
+    }
 }
 
 @Composable
