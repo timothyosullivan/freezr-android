@@ -34,6 +34,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
 import kotlin.math.abs
 import com.freezr.data.model.*
@@ -100,8 +101,10 @@ private fun FreezrApp(vm: ContainerViewModel) {
                     onDelete = { id ->
                         vm.softDelete(id)
                         scope.launch {
+                            // Dismiss any existing snackbar to avoid stacking and lingering
+                            snackbarHostState.currentSnackbarData?.dismiss()
                             val res = snackbarHostState.showSnackbar("Deleted", actionLabel = "Undo")
-                            if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete()
+                            if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete() else snackbarHostState.currentSnackbarData?.dismiss()
                         }
                     },
                     onLabel = { c -> labelPreview = c }
@@ -343,16 +346,25 @@ private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
 private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    val hasPermission = remember {
-        mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(
-            context, android.Manifest.permission.CAMERA
-        ) == android.content.pm.PackageManager.PERMISSION_GRANTED)
-    }
-    // If permission was just granted externally, this will refresh when recomposed from activity result
-    LaunchedEffect(Unit) {
-        hasPermission.value = androidx.core.content.ContextCompat.checkSelfPermission(
+    val hasPermission = remember { mutableStateOf(
+        androidx.core.content.ContextCompat.checkSelfPermission(
             context, android.Manifest.permission.CAMERA
         ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    ) }
+    var permissionRequestAttempts by remember { mutableStateOf(0) }
+    // After each request attempt, poll briefly until system callback updates state.
+    LaunchedEffect(permissionRequestAttempts) {
+        if (permissionRequestAttempts > 0) {
+            repeat(10) { // ~3s max
+                if (androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, android.Manifest.permission.CAMERA
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    hasPermission.value = true
+                    return@LaunchedEffect
+                }
+                delay(300)
+            }
+        }
     }
     var detected by remember { mutableStateOf<String?>(null) }
     var torchOn by remember { mutableStateOf(false) }
@@ -366,6 +378,7 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 TextButton(onClick = {
                     if (context is android.app.Activity) {
+                        permissionRequestAttempts++
                         context.requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 1002)
                     }
                 }) { Text("Grant Permission") }
