@@ -101,10 +101,9 @@ private fun FreezrApp(vm: ContainerViewModel) {
                     onDelete = { id ->
                         vm.softDelete(id)
                         scope.launch {
-                            // Dismiss any existing snackbar to avoid stacking and lingering
                             snackbarHostState.currentSnackbarData?.dismiss()
-                            val res = snackbarHostState.showSnackbar("Deleted", actionLabel = "Undo")
-                            if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete() else snackbarHostState.currentSnackbarData?.dismiss()
+                            val res = snackbarHostState.showSnackbar("Deleted", actionLabel = "Undo", withDismissAction = true, duration = SnackbarDuration.Short)
+                            if (res == SnackbarResult.ActionPerformed) vm.undoLastDelete()
                         }
                     },
                     onLabel = { c -> labelPreview = c }
@@ -138,12 +137,12 @@ private fun FreezrApp(vm: ContainerViewModel) {
         scanDialog?.let { sd ->
             val existing = sd.existing
             when (sd.mode) {
-                ScanMode.UNKNOWN -> ClaimDialog(uuid = sd.uuid, initialName = "", onDismiss = vm::dismissScanDialog) { name, shelf, alert ->
-                    vm.createFromScan(name, reminderDays = alert, shelfLifeDays = shelf)
+                ScanMode.UNKNOWN -> ClaimDialog(uuid = sd.uuid, initialName = "", onDismiss = vm::dismissScanDialog) { name, shelf, alert, timeMinutes ->
+                    vm.createFromScan(name, reminderDays = alert, shelfLifeDays = shelf, reminderTimeMinutes = timeMinutes)
                     scope.launch { snackbarHostState.showSnackbar("Created from scan") }
                 }
-                ScanMode.UNUSED -> ClaimDialog(uuid = sd.uuid, initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert ->
-                    vm.claimFromScan(name, shelfLifeDays = shelf, reminderDays = alert)
+                ScanMode.UNUSED -> ClaimDialog(uuid = sd.uuid, initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert, timeMinutes ->
+                    vm.claimFromScan(name, shelfLifeDays = shelf, reminderDays = alert, reminderTimeMinutes = timeMinutes)
                     scope.launch { snackbarHostState.showSnackbar("Label claimed") }
                 }
                 ScanMode.ACTIVE -> ActiveDialog(container = existing!!, ui = ui, onDismiss = vm::dismissScanDialog,
@@ -151,8 +150,8 @@ private fun FreezrApp(vm: ContainerViewModel) {
                     onAlertDays = { d -> vm.updateReminderDays(existing.id, d) },
                     onSnooze = { at -> vm.updateReminderAt(existing.id, at) },
                     onMarkUsed = { vm.markUsed(existing.id) })
-                ScanMode.HISTORICAL -> ReuseDialog(initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert ->
-                    vm.reuseFromScan(name.ifBlank { null }, reminderDays = alert, shelfLifeDays = shelf)
+                ScanMode.HISTORICAL -> ReuseDialog(initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert, timeMinutes ->
+                    vm.reuseFromScan(name.ifBlank { null }, reminderDays = alert, shelfLifeDays = shelf, reminderTimeMinutes = timeMinutes)
                     scope.launch { snackbarHostState.showSnackbar("Reused label") }
                 }
             }
@@ -208,10 +207,12 @@ private fun PrintDialog(onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
 }
 
 @Composable
-private fun ClaimDialog(uuid: String, initialName: String, onDismiss: () -> Unit, onSave: (String, Int?, Int?) -> Unit) {
+private fun ClaimDialog(uuid: String, initialName: String, onDismiss: () -> Unit, onSave: (String, Int?, Int?, Int) -> Unit) {
     var name by remember(uuid) { mutableStateOf(initialName) }
     var shelfLife by remember { mutableStateOf("") }
     var alert by remember { mutableStateOf("") }
+    var hour by remember { mutableStateOf(8) }
+    var minute by remember { mutableStateOf(0) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Claim Label") }, text = {
         Column {
             Text("UUID: $uuid", style = MaterialTheme.typography.bodySmall)
@@ -221,13 +222,21 @@ private fun ClaimDialog(uuid: String, initialName: String, onDismiss: () -> Unit
             OutlinedTextField(value = shelfLife, onValueChange = { if (it.length<=3) shelfLife = it.filter(Char::isDigit) }, label = { Text("Shelf life days (optional)") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(value = alert, onValueChange = { if (it.length<=3) alert = it.filter(Char::isDigit) }, label = { Text("Reminder alert in (days, optional)") }, singleLine = true)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = "%02d".format(hour), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..23) hour = it } }, label = { Text("HH") }, modifier = Modifier.width(80.dp), singleLine = true)
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(value = "%02d".format(minute), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..59) minute = it } }, label = { Text("MM") }, modifier = Modifier.width(80.dp), singleLine = true)
+                Spacer(Modifier.width(8.dp))
+                Text("Reminder time", style = MaterialTheme.typography.labelSmall)
+            }
             Spacer(Modifier.height(4.dp))
-            Text("Shelf life = total freshness. Reminder = earlier alert.", style = MaterialTheme.typography.bodySmall)
+            Text("Shelf life = total freshness. Reminder = earlier alert (fires at chosen time).", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = {
         val shelf = shelfLife.toIntOrNull()
         val alertDays = alert.toIntOrNull()
-        TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), shelf, alertDays); onDismiss() }) { Text("Save") }
+        TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), shelf, alertDays, hour*60 + minute); onDismiss() }) { Text("Save") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
@@ -304,10 +313,12 @@ private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: 
 }
 
 @Composable
-private fun ReuseDialog(initialName: String, onDismiss: () -> Unit, onReuse: (String, Int?, Int?) -> Unit) {
+private fun ReuseDialog(initialName: String, onDismiss: () -> Unit, onReuse: (String, Int?, Int?, Int) -> Unit) {
     var name by remember { mutableStateOf(initialName) }
     var shelfLife by remember { mutableStateOf("") }
     var alert by remember { mutableStateOf("") }
+    var hour by remember { mutableStateOf(8) }
+    var minute by remember { mutableStateOf(0) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Reuse Label") }, text = {
         Column {
             OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (optional)") })
@@ -315,11 +326,19 @@ private fun ReuseDialog(initialName: String, onDismiss: () -> Unit, onReuse: (St
             OutlinedTextField(value = shelfLife, onValueChange = { if (it.length<=3) shelfLife = it.filter(Char::isDigit) }, label = { Text("Shelf life days (optional)") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(value = alert, onValueChange = { if (it.length<=3) alert = it.filter(Char::isDigit) }, label = { Text("Reminder alert in (days, optional)") }, singleLine = true)
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(value = "%02d".format(hour), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..23) hour = it } }, label = { Text("HH") }, modifier = Modifier.width(80.dp), singleLine = true)
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(value = "%02d".format(minute), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..59) minute = it } }, label = { Text("MM") }, modifier = Modifier.width(80.dp), singleLine = true)
+                Spacer(Modifier.width(8.dp))
+                Text("Reminder time", style = MaterialTheme.typography.labelSmall)
+            }
             Spacer(Modifier.height(4.dp))
             Text("Set either or both now, or edit later.", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = {
-        TextButton(onClick = { onReuse(name, shelfLife.toIntOrNull(), alert.toIntOrNull()); onDismiss() }) { Text("Reuse") }
+        TextButton(onClick = { onReuse(name, shelfLife.toIntOrNull(), alert.toIntOrNull(), hour*60 + minute); onDismiss() }) { Text("Reuse") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
@@ -510,8 +529,16 @@ private fun ContainerList(items: List<Container>, expiringSoonDays: Int, critica
                         }
                         Text(remLabel, style = MaterialTheme.typography.bodySmall)
                         c.reminderAt?.let { ra ->
-                            val rd = (ra - now)/dayMs
-                            val alertLabel = if (rd < 0) "Alert overdue" else if (rd==0L) "Alert today" else "Alert in ${rd}d"
+                            val rd = kotlin.math.ceil((ra - now).toDouble()/dayMs.toDouble()).toLong()
+                            val hmCal = java.util.Calendar.getInstance().apply { timeInMillis = ra }
+                            val hh = hmCal.get(java.util.Calendar.HOUR_OF_DAY)
+                            val mm = hmCal.get(java.util.Calendar.MINUTE)
+                            val timeStr = "%02d:%02d".format(hh, mm)
+                            val alertLabel = when {
+                                rd < 0 -> "Alert overdue ($timeStr)"
+                                rd == 0L -> "Alert today @ $timeStr"
+                                else -> "Alert in ${rd}d @ $timeStr"
+                            }
                             Text(alertLabel, style = MaterialTheme.typography.bodySmall)
                         }
                         Text("Scanned: ${formatFullDate(c.createdAt)}", style = MaterialTheme.typography.bodySmall)

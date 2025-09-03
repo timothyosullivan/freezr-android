@@ -75,7 +75,7 @@ class ContainerViewModel @Inject constructor(
 
     // (Removed earlier simpler createFromScan; unified version is below)
 
-    fun reuseFromScan(newName: String?, reminderDays: Int? = null, shelfLifeDays: Int? = null) = viewModelScope.launch {
+    fun reuseFromScan(newName: String?, reminderDays: Int? = null, shelfLifeDays: Int? = null, reminderTimeMinutes: Int = DEFAULT_ALERT_TIME_MINUTES) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing ?: return@launch
         // Cancel any reminder on the old container before reusing
@@ -86,10 +86,9 @@ class ContainerViewModel @Inject constructor(
             // If custom days provided, persist them and schedule; else use default.
             if (reminderDays != null) {
                 containers.updateReminderDays(id, reminderDays)
-                val triggerAt = System.currentTimeMillis() + reminderDays * 24L * 60L * 60L * 1000L
-                reminderScheduler.schedule(id, triggerAt)
+                scheduleReminder(id, reminderDays, reminderTimeMinutes)
             } else {
-                scheduleReminder(id, null)
+                scheduleReminder(id, null, reminderTimeMinutes)
             }
         }
         _scanDialog.value = null
@@ -98,12 +97,12 @@ class ContainerViewModel @Inject constructor(
     // Placeholder generation removed from printing flow: labels are now purely physical until scanned.
 
     /** Claim an UNUSED placeholder scanned label */
-    fun claimFromScan(name: String, shelfLifeDays: Int? = null, reminderDays: Int? = null) = viewModelScope.launch {
+    fun claimFromScan(name: String, shelfLifeDays: Int? = null, reminderDays: Int? = null, reminderTimeMinutes: Int = DEFAULT_ALERT_TIME_MINUTES) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing ?: return@launch
         if (existing.status != Status.UNUSED) return@launch
-        val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, shelfLifeDays = shelfLifeDays, reminderDays = reminderDays)
-        if (id > 0 && reminderDays != null) scheduleReminder(id, reminderDays) // only schedule if user specified
+    val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, shelfLifeDays = shelfLifeDays, reminderDays = reminderDays)
+    if (id > 0 && reminderDays != null) scheduleReminder(id, reminderDays, reminderTimeMinutes) // only schedule if user specified
         _scanDialog.value = null
     }
 
@@ -136,19 +135,18 @@ class ContainerViewModel @Inject constructor(
     // Removed generatePlaceholders() – labels for printing are now ephemeral and not inserted until scan claim.
     
     // Legacy path (may be removed when UI no longer calls it); only valid for UNKNOWN mode where we create new row from scanned uuid
-    fun createFromScan(name: String, reminderDays: Int? = null, shelfLifeDays: Int? = null) = viewModelScope.launch {
+    fun createFromScan(name: String, reminderDays: Int? = null, shelfLifeDays: Int? = null, reminderTimeMinutes: Int = DEFAULT_ALERT_TIME_MINUTES) = viewModelScope.launch {
         val current = _scanDialog.value ?: return@launch
         val existing = current.existing
         when {
             existing == null -> {
                 val id = containers.addFromScan(current.uuid, name = name)
-                // If user supplied a shelf life for a brand new scan, persist it (was previously ignored – bug fix)
                 if (shelfLifeDays != null) containers.updateShelfLifeDays(id, shelfLifeDays)
-                if (reminderDays != null) scheduleReminder(id, reminderDays)
+                if (reminderDays != null) scheduleReminder(id, reminderDays, reminderTimeMinutes)
             }
             existing.status == Status.UNUSED -> {
                 val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, shelfLifeDays = shelfLifeDays, reminderDays = reminderDays)
-                if (id > 0 && reminderDays != null) scheduleReminder(id, reminderDays)
+                if (id > 0 && reminderDays != null) scheduleReminder(id, reminderDays, reminderTimeMinutes)
             }
             else -> { /* ignore; UI should use reuse */ }
         }
