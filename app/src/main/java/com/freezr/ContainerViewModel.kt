@@ -107,11 +107,31 @@ class ContainerViewModel @Inject constructor(
         _scanDialog.value = null
     }
 
-    private fun scheduleReminder(id: Long, reminderDays: Int?) {
+    private fun scheduleReminder(id: Long, reminderDays: Int?, timeOfDayMinutes: Int = DEFAULT_ALERT_TIME_MINUTES) {
         val settings = settings.value
         val days = reminderDays ?: settings.defaultReminderDays
-        val triggerAt = System.currentTimeMillis() + days * 24L * 60L * 60L * 1000L
+        val triggerAt = computeTriggerAt(days, timeOfDayMinutes)
         reminderScheduler.schedule(id, triggerAt)
+    }
+
+    private fun computeTriggerAt(days: Int, timeOfDayMinutes: Int): Long {
+        val cal = java.util.Calendar.getInstance()
+        // Normalize to today 00:00 then add target days + set desired time
+        cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+        cal.set(java.util.Calendar.MINUTE, 0)
+        cal.set(java.util.Calendar.SECOND, 0)
+        cal.set(java.util.Calendar.MILLISECOND, 0)
+        cal.add(java.util.Calendar.DAY_OF_YEAR, days)
+        cal.set(java.util.Calendar.HOUR_OF_DAY, timeOfDayMinutes / 60)
+        cal.set(java.util.Calendar.MINUTE, timeOfDayMinutes % 60)
+        return cal.timeInMillis
+    }
+
+    fun updateReminderDaysWithTime(id: Long, days: Int, hour: Int, minute: Int) = viewModelScope.launch {
+        containers.updateReminderDays(id, days) // persists days + recalculates reminderAt (we'll overwrite with anchored time)
+        val triggerAt = computeTriggerAt(days, hour*60 + minute)
+        reminderScheduler.schedule(id, triggerAt)
+        containers.updateReminderAt(id, triggerAt)
     }
     // Removed generatePlaceholders() – labels for printing are now ephemeral and not inserted until scan claim.
     
@@ -174,12 +194,15 @@ class ContainerViewModel @Inject constructor(
     fun snooze(id: Long, days: Int = 7) = viewModelScope.launch { containers.snooze(id, days) }
     fun updateReminderDays(id: Long, days: Int) = viewModelScope.launch {
         containers.updateReminderDays(id, days)
-        val newAt = System.currentTimeMillis() + days * 24L * 60L * 60L * 1000L
-        reminderScheduler.schedule(id, newAt)
+        val triggerAt = computeTriggerAt(days, DEFAULT_ALERT_TIME_MINUTES)
+        reminderScheduler.schedule(id, triggerAt)
+        containers.updateReminderAt(id, triggerAt)
     }
     fun updateReminderAt(id: Long, at: Long) = viewModelScope.launch { containers.updateReminderAt(id, at); reminderScheduler.schedule(id, at) }
     fun updateShelfLifeDays(id: Long, days: Int) = viewModelScope.launch { containers.updateShelfLifeDays(id, days) }
 }
+
+private const val DEFAULT_ALERT_TIME_MINUTES = 8 * 60
 
 data class ContainerUiState(
     val items: List<Container> = emptyList(),

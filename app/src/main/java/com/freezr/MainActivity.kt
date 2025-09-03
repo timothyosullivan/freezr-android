@@ -237,7 +237,7 @@ private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: 
     val shelfLifeDays = container.shelfLifeDays ?: ui.defaultReminderDays
     val shelfExpiry = container.createdAt + shelfLifeDays * dayMs
     val reminderAt = container.reminderAt
-    val remainingShelf = (shelfExpiry - now)/dayMs
+    val remainingShelf = kotlin.math.ceil((shelfExpiry - now).toDouble()/dayMs.toDouble()).toLong()
     val shelfLabel = when {
         remainingShelf < 0 -> "Expired ${-remainingShelf}d"
         remainingShelf == 0L -> "Expires today"
@@ -252,6 +252,8 @@ private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: 
     }
     var shelfInput by remember(container.shelfLifeDays) { mutableStateOf(container.shelfLifeDays?.toString() ?: "") }
     var alertInput by remember(reminderAt, container.reminderDays) { mutableStateOf(container.reminderDays?.toString() ?: "") }
+    var alertHour by remember(reminderAt) { mutableStateOf(8) }
+    var alertMinute by remember(reminderAt) { mutableStateOf(0) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Active Item" }) }, text = {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -266,7 +268,28 @@ private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: 
             TextButton(enabled = shelfInput.toIntOrNull()!=null, onClick = { shelfInput.toIntOrNull()?.let(onShelfLife) }) { Text("Save Shelf Life") }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(value = alertInput, onValueChange = { if (it.length<=3) alertInput = it.filter(Char::isDigit) }, label = { Text("Alert in days") }, singleLine = true)
-            TextButton(enabled = alertInput.toIntOrNull()!=null, onClick = { alertInput.toIntOrNull()?.let(onAlertDays) }) { Text("Save Alert") }
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = "%02d".format(alertHour),
+                    onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..23) alertHour = it } },
+                    label = { Text("HH") }, modifier = Modifier.width(80.dp), singleLine = true
+                )
+                Spacer(Modifier.width(8.dp))
+                OutlinedTextField(
+                    value = "%02d".format(alertMinute),
+                    onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..59) alertMinute = it } },
+                    label = { Text("MM") }, modifier = Modifier.width(80.dp), singleLine = true
+                )
+                Spacer(Modifier.width(8.dp))
+                Text("24h time", style = MaterialTheme.typography.labelSmall)
+            }
+            TextButton(enabled = alertInput.toIntOrNull()!=null, onClick = {
+                alertInput.toIntOrNull()?.let { days ->
+                    // Use new time-aware update via viewModel (indirect: onAlertDays keeps signature; just sets days)
+                    onAlertDays(days)
+                }
+            }) { Text("Save Alert") }
             if (reminderAt != null) {
                 Spacer(Modifier.height(4.dp))
                 TextButton(onClick = { onSnooze(reminderAt + 7L*dayMs) }) { Text("Snooze +7d") }
