@@ -19,9 +19,15 @@ class ReminderFilterCoverageTest {
             Container(name="D", status = Status.USED, reminderAt = soon)
         )
         // Basic assertions just to exercise logic indirectly via simple expectations
-        val expiringSoon = list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt > now && it.reminderAt - now <= 7L*24*60*60*1000 }
+        val expiringSoon = list.filter { c ->
+            val ra = c.reminderAt
+            c.status == Status.ACTIVE && ra != null && ra > now && ra - now <= 7L*24*60*60*1000
+        }
         assertEquals(1, expiringSoon.size)
-        val expired = list.filter { it.status == Status.ACTIVE && it.reminderAt != null && it.reminderAt <= now }
+        val expired = list.filter { c ->
+            val ra = c.reminderAt
+            c.status == Status.ACTIVE && ra != null && ra <= now
+        }
         assertEquals(1, expired.size)
     }
 }

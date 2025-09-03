@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 package com.freezr
 
 import android.os.Bundle
@@ -18,8 +19,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.*
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.*
+import kotlin.OptIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -49,7 +50,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         maybeRequestNotificationPermission()
     maybeRequestCameraPermission()
-        setContent { FreezrApp(vm) }
+        val startIntent = intent
+        setContent {
+            LaunchedEffect(startIntent) { startIntent?.let { handleAppIntent(it) } }
+            FreezrApp(vm)
+        }
+    }
+    private fun handleAppIntent(intent: android.content.Intent) {
+        if (intent.action == "com.freezr.ACTION_OPEN_CONTAINER") {
+            val id = intent.getLongExtra("containerId", -1L)
+            if (id > 0) vm.openScanDialogForId(id)
+        }
     }
     private fun maybeRequestNotificationPermission() {
         if (android.os.Build.VERSION.SDK_INT >= 33) {
@@ -145,12 +156,16 @@ private fun FreezrApp(vm: ContainerViewModel) {
                     vm.claimFromScan(name, shelfLifeDays = shelf, reminderDays = alert, reminderTimeMinutes = timeMinutes)
                     scope.launch { snackbarHostState.showSnackbar("Label claimed") }
                 }
-                ScanMode.ACTIVE -> ActiveDialog(container = existing!!, ui = ui, onDismiss = vm::dismissScanDialog,
+                ScanMode.ACTIVE -> ActiveDialog(
+                    container = existing!!,
+                    ui = ui,
+                    onDismiss = vm::dismissScanDialog,
                     onShelfLife = { d -> vm.updateShelfLifeDays(existing.id, d) },
-                    onAlertDays = { d -> vm.updateReminderDays(existing.id, d) },
+                    onReminderDateTime = { dateMidnight, hh, mm -> vm.updateReminderExplicit(existing.id, dateMidnight, hh, mm) },
                     onSnooze = { at -> vm.updateReminderAt(existing.id, at) },
-                    onMarkUsed = { vm.markUsed(existing.id) })
-                ScanMode.HISTORICAL -> ReuseDialog(initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert, timeMinutes ->
+                    onMarkUsed = { vm.markUsed(existing.id) }
+                )
+                ScanMode.HISTORICAL -> ClaimDialog(uuid = sd.uuid, initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert, timeMinutes ->
                     vm.reuseFromScan(name.ifBlank { null }, reminderDays = alert, shelfLifeDays = shelf, reminderTimeMinutes = timeMinutes)
                     scope.launch { snackbarHostState.showSnackbar("Reused label") }
                 }
@@ -210,9 +225,10 @@ private fun PrintDialog(onDismiss: () -> Unit, onConfirm: (Int) -> Unit) {
 private fun ClaimDialog(uuid: String, initialName: String, onDismiss: () -> Unit, onSave: (String, Int?, Int?, Int) -> Unit) {
     var name by remember(uuid) { mutableStateOf(initialName) }
     var shelfLife by remember { mutableStateOf("") }
-    var alert by remember { mutableStateOf("") }
+    var selectedDateMidnight by remember { mutableStateOf<Long?>(null) }
     var hour by remember { mutableStateOf(8) }
     var minute by remember { mutableStateOf(0) }
+    var showDateTime by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Claim Label") }, text = {
         Column {
             Text("UUID: $uuid", style = MaterialTheme.typography.bodySmall)
@@ -221,27 +237,35 @@ private fun ClaimDialog(uuid: String, initialName: String, onDismiss: () -> Unit
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(value = shelfLife, onValueChange = { if (it.length<=3) shelfLife = it.filter(Char::isDigit) }, label = { Text("Shelf life days (optional)") }, singleLine = true)
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = alert, onValueChange = { if (it.length<=3) alert = it.filter(Char::isDigit) }, label = { Text("Reminder alert in (days, optional)") }, singleLine = true)
-            Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = "%02d".format(hour), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..23) hour = it } }, label = { Text("HH") }, modifier = Modifier.width(80.dp), singleLine = true)
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(value = "%02d".format(minute), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..59) minute = it } }, label = { Text("MM") }, modifier = Modifier.width(80.dp), singleLine = true)
-                Spacer(Modifier.width(8.dp))
-                Text("Reminder time", style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = { showDateTime = true }) { Text(selectedDateMidnight?.let { formatShortDate(it) + " %02d:%02d".format(hour, minute) } ?: "Pick reminder date & time (optional)") }
+                if (selectedDateMidnight != null) TextButton(onClick = { selectedDateMidnight = null }) { Text("Clear") }
             }
             Spacer(Modifier.height(4.dp))
-            Text("Shelf life = total freshness. Reminder = earlier alert (fires at chosen time).", style = MaterialTheme.typography.bodySmall)
+            Text("Choose a specific calendar date + time for reminder.", style = MaterialTheme.typography.bodySmall)
         }
     }, confirmButton = {
         val shelf = shelfLife.toIntOrNull()
-        val alertDays = alert.toIntOrNull()
+        val alertDays = selectedDateMidnight?.let { millisToDayDiff(it) }
         TextButton(enabled = name.isNotBlank(), onClick = { onSave(name.trim(), shelf, alertDays, hour*60 + minute); onDismiss() }) { Text("Save") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    if (showDateTime) {
+        DateTimePickerDialog(initialDateMidnight = selectedDateMidnight, initialHour = hour, initialMinute = minute, onDismiss = { showDateTime = false }) { d, h, m ->
+            selectedDateMidnight = d; hour = h; minute = m; showDateTime = false
+        }
+    }
 }
 
 @Composable
-private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: () -> Unit, onShelfLife: (Int) -> Unit, onAlertDays: (Int) -> Unit, onSnooze: (Long) -> Unit, onMarkUsed: () -> Unit) {
+private fun ActiveDialog(
+    container: Container,
+    ui: ContainerUiState,
+    onDismiss: () -> Unit,
+    onShelfLife: (Int) -> Unit,
+    onReminderDateTime: (Long, Int, Int) -> Unit,
+    onSnooze: (Long) -> Unit,
+    onMarkUsed: () -> Unit
+) {
     val now = System.currentTimeMillis()
     val dayMs = 24L*60*60*1000L
     val soonMs = ui.expiringSoonDays * dayMs
@@ -263,9 +287,15 @@ private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: 
         else -> rel(shelfRemainingMs) to Color(0xFF2E7D32)
     }
     var shelfInput by remember(container.shelfLifeDays) { mutableStateOf(container.shelfLifeDays?.toString() ?: "") }
-    var alertInput by remember(reminderAt, container.reminderDays) { mutableStateOf(container.reminderDays?.toString() ?: "") }
-    var alertHour by remember(reminderAt) { mutableStateOf(8) }
-    var alertMinute by remember(reminderAt) { mutableStateOf(0) }
+    val existingCal = remember(reminderAt) { reminderAt?.let { java.util.Calendar.getInstance().apply { timeInMillis = it } } }
+    var selectedDateMidnight by remember(reminderAt) {
+        mutableStateOf(existingCal?.clone()?.let { (it as java.util.Calendar).apply {
+            set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+        }.timeInMillis })
+    }
+    var hour by remember(reminderAt) { mutableStateOf(existingCal?.get(java.util.Calendar.HOUR_OF_DAY) ?: 8) }
+    var minute by remember(reminderAt) { mutableStateOf(existingCal?.get(java.util.Calendar.MINUTE) ?: 0) }
+    var showDateTime by remember { mutableStateOf(false) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Active Item" }) }, text = {
         Column {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -279,66 +309,19 @@ private fun ActiveDialog(container: Container, ui: ContainerUiState, onDismiss: 
             OutlinedTextField(value = shelfInput, onValueChange = { if (it.length<=3) shelfInput = it.filter(Char::isDigit) }, label = { Text("Shelf life days") }, singleLine = true)
             TextButton(enabled = shelfInput.toIntOrNull()!=null, onClick = { shelfInput.toIntOrNull()?.let(onShelfLife) }) { Text("Save Shelf Life") }
             Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = alertInput, onValueChange = { if (it.length<=3) alertInput = it.filter(Char::isDigit) }, label = { Text("Alert in days") }, singleLine = true)
-            Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = "%02d".format(alertHour),
-                    onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..23) alertHour = it } },
-                    label = { Text("HH") }, modifier = Modifier.width(80.dp), singleLine = true
-                )
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(
-                    value = "%02d".format(alertMinute),
-                    onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..59) alertMinute = it } },
-                    label = { Text("MM") }, modifier = Modifier.width(80.dp), singleLine = true
-                )
-                Spacer(Modifier.width(8.dp))
-                Text("24h time", style = MaterialTheme.typography.labelSmall)
+                TextButton(onClick = { showDateTime = true }) { Text(selectedDateMidnight?.let { formatShortDate(it) + " %02d:%02d".format(hour, minute) } ?: "Pick reminder date & time") }
+                if (selectedDateMidnight != null) TextButton(onClick = { selectedDateMidnight = null }) { Text("Clear") }
             }
-            TextButton(enabled = alertInput.toIntOrNull()!=null, onClick = {
-                alertInput.toIntOrNull()?.let { days ->
-                    // Use new time-aware update via viewModel (indirect: onAlertDays keeps signature; just sets days)
-                    onAlertDays(days)
+            // Snooze removed per request
+            if (showDateTime) {
+                DateTimePickerDialog(initialDateMidnight = selectedDateMidnight, initialHour = hour, initialMinute = minute, onDismiss = { showDateTime = false }) { d, h, m ->
+                    selectedDateMidnight = d; hour = h; minute = m; showDateTime = false
                 }
-            }) { Text("Save Alert") }
-            if (reminderAt != null) {
-                Spacer(Modifier.height(4.dp))
-                TextButton(onClick = { onSnooze(reminderAt + 7L*dayMs) }) { Text("Snooze +7d") }
             }
         }
     }, confirmButton = {
-        Row { TextButton(onClick = { onMarkUsed(); onDismiss() }) { Text("Mark Used") }; TextButton(onClick = onDismiss) { Text("Close") } }
-    })
-}
-
-@Composable
-private fun ReuseDialog(initialName: String, onDismiss: () -> Unit, onReuse: (String, Int?, Int?, Int) -> Unit) {
-    var name by remember { mutableStateOf(initialName) }
-    var shelfLife by remember { mutableStateOf("") }
-    var alert by remember { mutableStateOf("") }
-    var hour by remember { mutableStateOf(8) }
-    var minute by remember { mutableStateOf(0) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Reuse Label") }, text = {
-        Column {
-            OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Name (optional)") })
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = shelfLife, onValueChange = { if (it.length<=3) shelfLife = it.filter(Char::isDigit) }, label = { Text("Shelf life days (optional)") }, singleLine = true)
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(value = alert, onValueChange = { if (it.length<=3) alert = it.filter(Char::isDigit) }, label = { Text("Reminder alert in (days, optional)") }, singleLine = true)
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(value = "%02d".format(hour), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..23) hour = it } }, label = { Text("HH") }, modifier = Modifier.width(80.dp), singleLine = true)
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(value = "%02d".format(minute), onValueChange = { v -> v.filter(Char::isDigit).take(2).toIntOrNull()?.let { if (it in 0..59) minute = it } }, label = { Text("MM") }, modifier = Modifier.width(80.dp), singleLine = true)
-                Spacer(Modifier.width(8.dp))
-                Text("Reminder time", style = MaterialTheme.typography.labelSmall)
-            }
-            Spacer(Modifier.height(4.dp))
-            Text("Set either or both now, or edit later.", style = MaterialTheme.typography.bodySmall)
-        }
-    }, confirmButton = {
-        TextButton(onClick = { onReuse(name, shelfLife.toIntOrNull(), alert.toIntOrNull(), hour*60 + minute); onDismiss() }) { Text("Reuse") }
+    TextButton(onClick = { selectedDateMidnight?.let { onReminderDateTime(it, hour, minute) }; onDismiss() }) { Text("Save") }
     }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
 }
 
@@ -529,17 +512,13 @@ private fun ContainerList(items: List<Container>, expiringSoonDays: Int, critica
                         }
                         Text(remLabel, style = MaterialTheme.typography.bodySmall)
                         c.reminderAt?.let { ra ->
-                            val rd = kotlin.math.ceil((ra - now).toDouble()/dayMs.toDouble()).toLong()
-                            val hmCal = java.util.Calendar.getInstance().apply { timeInMillis = ra }
-                            val hh = hmCal.get(java.util.Calendar.HOUR_OF_DAY)
-                            val mm = hmCal.get(java.util.Calendar.MINUTE)
+                            val cal = java.util.Calendar.getInstance().apply { timeInMillis = ra }
+                            val dateStr = formatShortDate(ra)
+                            val hh = cal.get(java.util.Calendar.HOUR_OF_DAY)
+                            val mm = cal.get(java.util.Calendar.MINUTE)
                             val timeStr = "%02d:%02d".format(hh, mm)
-                            val alertLabel = when {
-                                rd < 0 -> "Alert overdue ($timeStr)"
-                                rd == 0L -> "Alert today @ $timeStr"
-                                else -> "Alert in ${rd}d @ $timeStr"
-                            }
-                            Text(alertLabel, style = MaterialTheme.typography.bodySmall)
+                            val label = if (ra < now) "Reminder passed $dateStr $timeStr" else "Reminder: $dateStr $timeStr"
+                            Text(label, style = MaterialTheme.typography.bodySmall)
                         }
                         Text("Scanned: ${formatFullDate(c.createdAt)}", style = MaterialTheme.typography.bodySmall)
                         Spacer(Modifier.height(2.dp))
@@ -550,13 +529,13 @@ private fun ContainerList(items: List<Container>, expiringSoonDays: Int, critica
                         }
                     }
                     Row {
+                        TextButton(onClick = { onLabel(c) }) { Text("Details") }
                         when (c.status) {
                             Status.UNUSED -> {}
                             Status.ACTIVE -> TextButton(onClick = { onMarkUsed(c.id) }) { Text("Used") }
                             Status.USED -> {}
                             Status.DELETED -> {}
                         }
-                        TextButton(onClick = { onLabel(c) }) { Text("Label") }
                         TextButton(onClick = { onDelete(c.id) }, modifier = Modifier.testTag(UiTestTags.DeleteButton)) { Text("Delete") }
                     }
                 }
@@ -584,6 +563,22 @@ private fun formatFullDate(epochMillis: Long): String {
         else -> "th"
     }
     return "${day}${suffix} ${monthName} ${year}"
+}
+
+private fun formatShortDate(epochMillis: Long): String {
+    val cal = java.util.Calendar.getInstance().apply { timeInMillis = epochMillis }
+    val day = cal.get(java.util.Calendar.DAY_OF_MONTH)
+    val month = cal.getDisplayName(java.util.Calendar.MONTH, java.util.Calendar.SHORT, java.util.Locale.getDefault()) ?: ""
+    return "$day $month"
+}
+
+private fun millisToDayDiff(targetMidnight: Long): Int {
+    val nowCal = java.util.Calendar.getInstance().apply {
+        set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+    }
+    val diff = targetMidnight - nowCal.timeInMillis
+    val dayMs = 24L*60*60*1000L
+    return if (diff <= 0) 0 else (diff / dayMs).toInt()
 }
 
 @Composable
@@ -637,7 +632,13 @@ private fun LabelPreviewDialog(container: Container, defaultShelfLifeDays: Int, 
         else -> "${remaining}d remaining"
     }
     val shelfLabel = "Shelf life: ${shelfDays}d (${remLabel})"
-    val reminderLabel = container.reminderDays?.let { "Reminder: ${it}d" } ?: "Reminder: none"
+    val reminderLabel = container.reminderAt?.let { at ->
+        val cal = java.util.Calendar.getInstance().apply { timeInMillis = at }
+        val hh = cal.get(java.util.Calendar.HOUR_OF_DAY)
+        val mm = cal.get(java.util.Calendar.MINUTE)
+        val timeStr = "%02d:%02d".format(hh, mm)
+        container.reminderDays?.let { d -> "Reminder: ${d}d @ ${timeStr}" } ?: "Reminder: @ ${timeStr}"
+    } ?: (container.reminderDays?.let { d -> "Reminder: ${d}d" } ?: "Reminder: none")
     val qrMatrix = remember(container.uuid) { QrCodeGenerator.matrix(QR_PREFIX + container.uuid, 256) }
     val bmp = remember(qrMatrix) {
         android.graphics.Bitmap.createBitmap(qrMatrix.size, qrMatrix.size, android.graphics.Bitmap.Config.ARGB_8888).apply {
@@ -646,14 +647,82 @@ private fun LabelPreviewDialog(container: Container, defaultShelfLifeDays: Int, 
             }
         }
     }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Label" }) }, text = {
+    var showDateTime by remember { mutableStateOf(false) }
+    var hour by remember(container.reminderAt) { mutableStateOf(container.reminderAt?.let { java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.HOUR_OF_DAY) } ?: 8) }
+    var minute by remember(container.reminderAt) { mutableStateOf(container.reminderAt?.let { java.util.Calendar.getInstance().apply { timeInMillis = it }.get(java.util.Calendar.MINUTE) } ?: 0) }
+    var selectedDateMidnight by remember(container.reminderAt) {
+        mutableStateOf(container.reminderAt?.let {
+            java.util.Calendar.getInstance().apply { timeInMillis = it; set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0) }.timeInMillis
+        })
+    }
+    val owner = androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner.current
+    val vm: ContainerViewModel? = owner?.let { androidx.lifecycle.viewmodel.compose.viewModel(it) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(container.name.ifBlank { "Details" }) }, text = {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Image(bmp.asImageBitmap(), contentDescription = "QR Code", modifier = Modifier.size(180.dp))
             Spacer(Modifier.height(8.dp))
             Text(shelfLabel, style = MaterialTheme.typography.bodySmall)
             Text(reminderLabel, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp))
+            TextButton(onClick = { showDateTime = true }) { Text(selectedDateMidnight?.let { "Change reminder (${formatShortDate(it)} %02d:%02d".format(hour, minute) + ")" } ?: "Set reminder date & time") }
             Text("UUID: ${container.uuid}", style = MaterialTheme.typography.labelSmall)
         }
     }, confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } })
+    if (showDateTime) {
+        DateTimePickerDialog(initialDateMidnight = selectedDateMidnight, initialHour = hour, initialMinute = minute, onDismiss = { showDateTime = false }) { d, h, m ->
+            selectedDateMidnight = d; hour = h; minute = m; showDateTime = false
+            vm?.updateReminderExplicit(container.id, d, h, m)
+        }
+    }
+}
+
+@Composable
+private fun DateTimePickerDialog(
+    initialDateMidnight: Long? = null,
+    initialHour: Int = 8,
+    initialMinute: Int = 0,
+    onDismiss: () -> Unit,
+    onConfirm: (dateMidnight: Long, hour: Int, minute: Int) -> Unit
+) {
+    val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMidnight)
+    var hour by remember { mutableStateOf(initialHour) }
+    var minute by remember { mutableStateOf(initialMinute) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Date & Time") },
+        text = {
+            Column {
+                DatePicker(state = datePickerState)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    var hourExpanded by remember { mutableStateOf(false) }
+                    var minExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(expanded = hourExpanded, onExpandedChange = { hourExpanded = !hourExpanded }) {
+                        OutlinedTextField(value = "%02d".format(hour), onValueChange = {}, readOnly = true, label = { Text("Hour") }, modifier = Modifier.menuAnchor().width(90.dp))
+                        ExposedDropdownMenu(expanded = hourExpanded, onDismissRequest = { hourExpanded = false }) {
+                            (0..23).forEach { h -> DropdownMenuItem(text = { Text("%02d".format(h)) }, onClick = { hour = h; hourExpanded = false }) }
+                        }
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    ExposedDropdownMenuBox(expanded = minExpanded, onExpandedChange = { minExpanded = !minExpanded }) {
+                        OutlinedTextField(value = "%02d".format(minute), onValueChange = {}, readOnly = true, label = { Text("Min") }, modifier = Modifier.menuAnchor().width(90.dp))
+                        ExposedDropdownMenu(expanded = minExpanded, onDismissRequest = { minExpanded = false }) {
+                            listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
+                val raw = datePickerState.selectedDateMillis ?: return@TextButton
+                val cal = java.util.Calendar.getInstance().apply {
+                    timeInMillis = raw
+                    set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+                }
+                onConfirm(cal.timeInMillis, hour, minute)
+            }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }

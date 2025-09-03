@@ -110,7 +110,8 @@ class ContainerViewModel @Inject constructor(
         val settings = settings.value
         val days = reminderDays ?: settings.defaultReminderDays
         val triggerAt = computeTriggerAt(days, timeOfDayMinutes)
-        reminderScheduler.schedule(id, triggerAt)
+    reminderScheduler.schedule(id, triggerAt)
+    viewModelScope.launch { containers.updateReminderAt(id, triggerAt) }
     }
 
     private fun computeTriggerAt(days: Int, timeOfDayMinutes: Int): Long {
@@ -142,7 +143,10 @@ class ContainerViewModel @Inject constructor(
             existing == null -> {
                 val id = containers.addFromScan(current.uuid, name = name)
                 if (shelfLifeDays != null) containers.updateShelfLifeDays(id, shelfLifeDays)
-                if (reminderDays != null) scheduleReminder(id, reminderDays, reminderTimeMinutes)
+                if (reminderDays != null) {
+                    containers.updateReminderDays(id, reminderDays)
+                    scheduleReminder(id, reminderDays, reminderTimeMinutes)
+                }
             }
             existing.status == Status.UNUSED -> {
                 val id = containers.claimPlaceholder(existing.uuid, name.trim(), quantity = 1, shelfLifeDays = shelfLifeDays, reminderDays = reminderDays)
@@ -197,7 +201,25 @@ class ContainerViewModel @Inject constructor(
         containers.updateReminderAt(id, triggerAt)
     }
     fun updateReminderAt(id: Long, at: Long) = viewModelScope.launch { containers.updateReminderAt(id, at); reminderScheduler.schedule(id, at) }
+    fun updateReminderExplicit(id: Long, targetDateMidnight: Long, hour: Int, minute: Int) = viewModelScope.launch {
+        val nowCal = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+        }
+        val days = ((targetDateMidnight - nowCal.timeInMillis) / (24L*60L*60L*1000L)).toInt().coerceAtLeast(0)
+        val triggerAt = java.util.Calendar.getInstance().apply {
+            timeInMillis = targetDateMidnight
+            set(java.util.Calendar.HOUR_OF_DAY, hour)
+            set(java.util.Calendar.MINUTE, minute)
+        }.timeInMillis
+        containers.updateReminderExplicit(id, days, triggerAt)
+        reminderScheduler.schedule(id, triggerAt)
+    }
     fun updateShelfLifeDays(id: Long, days: Int) = viewModelScope.launch { containers.updateShelfLifeDays(id, days) }
+
+    fun openScanDialogForId(id: Long) = viewModelScope.launch {
+        val c = containers.getById(id) ?: return@launch
+        _scanDialog.value = ScanDialogState(uuid = c.uuid, existing = c)
+    }
 }
 
 private const val DEFAULT_ALERT_TIME_MINUTES = 8 * 60

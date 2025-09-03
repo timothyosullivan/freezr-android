@@ -70,6 +70,13 @@ class ContainerRepository(private val dao: ContainerDao) {
         dao.update(existing.copy(reminderAt = at, updatedAt = System.currentTimeMillis()))
     }
 
+    suspend fun getById(id: Long) = dao.getById(id)
+
+    suspend fun updateReminderExplicit(id: Long, days: Int, at: Long) {
+        val existing = dao.getById(id) ?: return
+        dao.update(existing.copy(reminderDays = days, reminderAt = at, updatedAt = System.currentTimeMillis()))
+    }
+
     suspend fun findByUuid(uuid: String) = dao.getByUuid(uuid)
 
     /**

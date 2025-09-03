@@ -8,6 +8,9 @@ import androidx.core.app.NotificationCompat
 import android.app.PendingIntent
 import android.content.Intent
 import androidx.core.app.NotificationManagerCompat
+import androidx.room.Room
+import com.freezr.data.database.AppDatabase
+import android.app.TaskStackBuilder
 import androidx.work.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
@@ -49,19 +52,31 @@ class ReminderWorker @AssistedInject constructor(
             action = ReminderActionReceiver.ACTION_MARK_USED
             putExtra(ReminderActionReceiver.EXTRA_ID, id)
         }
-        val snoozeIntent = Intent(applicationContext, ReminderActionReceiver::class.java).apply {
-            action = ReminderActionReceiver.ACTION_SNOOZE
-            putExtra(ReminderActionReceiver.EXTRA_ID, id)
+    val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
+    val markUsedPending = PendingIntent.getBroadcast(applicationContext, (id * 2).toInt(), markUsedIntent, flags)
+        // Fetch container name (fallback to generic)
+        val db = Room.databaseBuilder(applicationContext, AppDatabase::class.java, "app.db").fallbackToDestructiveMigration().build()
+        val container = try { db.containerDao().getById(id) } catch (_: Exception) { null }
+        val openIntent = Intent(applicationContext, com.freezr.MainActivity::class.java).apply {
+            action = "com.freezr.ACTION_OPEN_CONTAINER"
+            putExtra("containerId", id)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
-        val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
-        val markUsedPending = PendingIntent.getBroadcast(applicationContext, (id * 2).toInt(), markUsedIntent, flags)
-        val snoozePending = PendingIntent.getBroadcast(applicationContext, (id * 2 + 1).toInt(), snoozeIntent, flags)
+        val openPending = PendingIntent.getActivity(
+            applicationContext,
+            (id * 3).toInt(),
+            openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
+        )
+        val itemName = container?.name?.takeIf { it.isNotBlank() } ?: "Item #$id"
+    val body = "$itemName – check if it needs action"
         val notif = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_popup_reminder)
             .setContentTitle("Freezr Reminder")
-            .setContentText("Item #$id may be expiring soon")
+            .setContentText(body)
+            .setContentIntent(openPending)
             .addAction(0, "Used", markUsedPending)
-            .addAction(0, "+7d", snoozePending)
+            // Snooze action removed
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .build()
