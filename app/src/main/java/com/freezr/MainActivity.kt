@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         maybeRequestNotificationPermission()
+    maybeRequestCameraPermission()
         setContent { FreezrApp(vm) }
     }
     private fun maybeRequestNotificationPermission() {
@@ -55,6 +56,13 @@ class MainActivity : ComponentActivity() {
             if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 requestPermissions(arrayOf(perm), 1001)
             }
+        }
+    }
+
+    private fun maybeRequestCameraPermission() {
+        val perm = android.Manifest.permission.CAMERA
+        if (checkSelfPermission(perm) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(perm), 1002)
         }
     }
 }
@@ -311,11 +319,39 @@ private fun SortMenu(current: SortOrder, onSelect: (SortOrder) -> Unit) {
 @Composable
 private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val hasPermission = remember {
+        mutableStateOf(androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED)
+    }
+    // If permission was just granted externally, this will refresh when recomposed from activity result
+    LaunchedEffect(Unit) {
+        hasPermission.value = androidx.core.content.ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.CAMERA
+        ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
     var detected by remember { mutableStateOf<String?>(null) }
     var torchOn by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var cameraRef by remember { mutableStateOf<androidx.camera.core.Camera?>(null) }
     LaunchedEffect(detected) { detected?.let { onResult(it) } }
+    if (!hasPermission.value) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Camera permission required to scan labels", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(12.dp))
+                TextButton(onClick = {
+                    if (context is android.app.Activity) {
+                        context.requestPermissions(arrayOf(android.Manifest.permission.CAMERA), 1002)
+                    }
+                }) { Text("Grant Permission") }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = onClose) { Text("Close") }
+            }
+        }
+        return
+    }
     Box(Modifier.fillMaxSize()) {
         AndroidView(factory = { ctx: android.content.Context ->
             val previewView = PreviewView(ctx)
