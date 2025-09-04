@@ -46,13 +46,6 @@ class ContainerRepository(private val dao: ContainerDao) {
         )
     }
 
-    suspend fun snooze(id: Long, days: Int) {
-        val existing = dao.getById(id) ?: return
-        if (existing.status != Status.ACTIVE) return
-        val base = existing.reminderAt?.takeIf { it > System.currentTimeMillis() } ?: System.currentTimeMillis()
-        val newAt = base + days * 24L * 60L * 60L * 1000L
-        dao.update(existing.copy(reminderAt = newAt, updatedAt = System.currentTimeMillis()))
-    }
 
     suspend fun updateReminderDays(id: Long, days: Int) {
         val existing = dao.getById(id) ?: return

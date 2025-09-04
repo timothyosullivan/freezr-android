@@ -193,7 +193,6 @@ class ContainerViewModel @Inject constructor(
         }
     }
 
-    fun snooze(id: Long, days: Int = 7) = viewModelScope.launch { containers.snooze(id, days) }
     fun updateReminderDays(id: Long, days: Int) = viewModelScope.launch {
         containers.updateReminderDays(id, days)
         val triggerAt = computeTriggerAt(days, DEFAULT_ALERT_TIME_MINUTES)

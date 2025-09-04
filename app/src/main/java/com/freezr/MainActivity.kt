@@ -201,7 +201,6 @@ private fun FreezrApp(vm: ContainerViewModel) {
                     onDismiss = vm::dismissScanDialog,
                     onShelfLife = { d -> vm.updateShelfLifeDays(existing.id, d) },
                     onReminderDateTime = { dateMidnight, hh, mm -> vm.updateReminderExplicit(existing.id, dateMidnight, hh, mm) },
-                    onSnooze = { at -> vm.updateReminderAt(existing.id, at) },
                     onMarkUsed = { vm.markUsed(existing.id) }
                 )
                 ScanMode.HISTORICAL -> ClaimDialog(uuid = sd.uuid, initialName = existing?.name ?: "", onDismiss = vm::dismissScanDialog) { name, shelf, alert, timeMinutes ->
@@ -320,7 +319,6 @@ private fun ActiveDialog(
     onDismiss: () -> Unit,
     onShelfLife: (Int) -> Unit,
     onReminderDateTime: (Long, Int, Int) -> Unit,
-    onSnooze: (Long) -> Unit,
     onMarkUsed: () -> Unit
 ) {
     val now = System.currentTimeMillis()
