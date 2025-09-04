@@ -109,6 +109,7 @@ private fun FreezrApp(vm: ContainerViewModel) {
     val scanDialog by vm.scanDialog.collectAsState()
     var settingsOpen by remember { mutableStateOf(false) }
     var guideOpen by remember { mutableStateOf(false) }
+    var privacyOpen by remember { mutableStateOf(false) }
     val context = androidx.compose.ui.platform.LocalContext.current
     var labelPreview: Container? by remember { mutableStateOf(null) }
     var printing by remember { mutableStateOf(false) }
@@ -159,8 +160,9 @@ private fun FreezrApp(vm: ContainerViewModel) {
             }
             BuildFooter()
         }
-    if (settingsOpen) SettingsDialog(vm = vm, onClose = { settingsOpen = false })
+    if (settingsOpen) SettingsDialog(vm = vm, onClose = { settingsOpen = false }, onOpenPrivacy = { settingsOpen = false; privacyOpen = true })
     if (guideOpen) UsageGuideDialog(onClose = { guideOpen = false })
+    if (privacyOpen) PrivacyPolicyDialog(onClose = { privacyOpen = false })
         if (printing) PrintDialog(onDismiss = { printing = false }) { count ->
             printing = false
             pendingPrintCount = count
@@ -650,7 +652,7 @@ private fun BuildFooter() {
 }
 
 @Composable
-private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
+private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit, onOpenPrivacy: () -> Unit) {
     val ui by vm.state.collectAsState()
     var defaultDays by remember { mutableStateOf(ui.defaultReminderDays.toString()) }
     var soon by remember { mutableStateOf(ui.expiringSoonDays.toString()) }
@@ -664,6 +666,8 @@ private fun SettingsDialog(vm: ContainerViewModel, onClose: () -> Unit) {
             OutlinedTextField(value = critical, onValueChange = { if (it.length<=3) critical = it.filter(Char::isDigit) }, label = { Text("Critical threshold (days)") }, singleLine = true)
             Spacer(Modifier.height(4.dp))
             Text("Thresholds color the alert (not the shelf life) dot.", style = MaterialTheme.typography.bodySmall)
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = onOpenPrivacy, modifier = Modifier.fillMaxWidth()) { Text("Privacy Policy") }
         }
     }, confirmButton = {
         TextButton(onClick = {
@@ -744,6 +748,39 @@ private fun UsageGuideDialog(onClose: () -> Unit) {
                 Bullet("Use 'Details' for quick reminder adjustments without re‑scanning.")
                 Spacer(Modifier.height(12.dp))
                 Text("You're set! Scan your first label or print some to get started.")
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
+    )
+}
+
+@Composable
+private fun PrivacyPolicyDialog(onClose: () -> Unit) {
+    val scroll = rememberScrollState()
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Privacy Policy") },
+        text = {
+            Column(Modifier.verticalScroll(scroll).fillMaxWidth()) {
+                Text("Freezr processes all data entirely on your device.", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Data Collected", fontWeight = FontWeight.Bold)
+                Bullet("Item details you enter (names, dates, reminders) stored locally in an on‑device database.")
+                Bullet("QR codes you scan are only interpreted locally; no images or codes are uploaded.")
+                Spacer(Modifier.height(8.dp))
+                Text("Not Collected", fontWeight = FontWeight.Bold)
+                Bullet("No personal identifiers, analytics, or tracking.")
+                Bullet("No cloud sync, accounts, or ads.")
+                Spacer(Modifier.height(8.dp))
+                Text("Permissions", fontWeight = FontWeight.Bold)
+                Bullet("Camera: used solely to scan Freezr QR codes.")
+                Bullet("Notifications & exact alarms: used to deliver item reminders on time.")
+                Spacer(Modifier.height(8.dp))
+                Text("Data Removal", fontWeight = FontWeight.Bold)
+                Bullet("Uninstalling the app removes all stored data.")
+                Spacer(Modifier.height(8.dp))
+                Text("Contact", fontWeight = FontWeight.Bold)
+                Text("For questions, open an issue on the project repository.", style = MaterialTheme.typography.bodySmall)
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text("Close") } }
