@@ -873,7 +873,14 @@ private fun DateTimePickerDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
     ) {
-        Column(Modifier.padding(8.dp)) {
+        val scroll = rememberScrollState()
+        Column(
+            Modifier
+                .padding(8.dp)
+                .verticalScroll(scroll)
+                .fillMaxWidth()
+                .heightIn(max = 520.dp) // ensure content scrolls instead of clipping
+        ) {
             DatePicker(state = datePickerState, modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
