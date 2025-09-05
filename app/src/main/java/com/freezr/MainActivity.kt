@@ -508,7 +508,6 @@ private fun ScanScreen(onClose: () -> Unit, onResult: (String) -> Unit) {
                     cameraRef?.cameraControl?.enableTorch(torchOn)
                 }) { Text(if (torchOn) "Torch Off" else "Torch On") }
                 TextButton(onClick = { paused = !paused }) { Text(if (paused) "Resume" else "Pause") }
-                TextButton(onClick = { if (detected == null) detected = "TEST-UUID-INJECT" }) { Text("Inject Test QR") }
             }
         }
     }
