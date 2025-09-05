@@ -3,14 +3,14 @@ package com.freezr
 import com.freezr.data.database.ContainerDao
 import com.freezr.data.model.Status
 import com.freezr.data.database.AppDatabase
-import androidx.room.Room
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import org.junit.After
 import org.junit.Test
+import androidx.room.Room
 import org.robolectric.RuntimeEnvironment
-
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
@@ -22,13 +22,16 @@ class ContainerRepositoryTest {
 
     @Before
     fun setup() {
-    val context = RuntimeEnvironment.getApplication()
-    db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+        val context = RuntimeEnvironment.getApplication()
+        db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
             .allowMainThreadQueries()
             .build()
         dao = db.containerDao()
         repo = com.freezr.data.repository.ContainerRepository(dao)
     }
+
+    @After
+    fun teardown() { if (::db.isInitialized) db.close() }
 
     @Test
     fun add_and_mark_used_flow() = runBlocking {
