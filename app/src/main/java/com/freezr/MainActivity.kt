@@ -23,6 +23,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.*
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.runtime.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -864,18 +865,31 @@ private fun DateTimePickerDialog(
     val scroll = rememberScrollState()
     val configuration = LocalConfiguration.current
     val maxHeight = (configuration.screenHeightDp * 0.9f).dp
-    Dialog(onDismissRequest = onDismiss) {
+    val screenWidth = configuration.screenWidthDp.dp
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 6.dp, modifier = Modifier
             .fillMaxWidth()
-            .padding(12.dp)
-            .widthIn(max = 420.dp)) {
-            Column(Modifier
-                .verticalScroll(scroll)
-                .padding(16.dp)
-                .heightIn(max = maxHeight)) {
+            .padding(horizontal = 8.dp, vertical = 12.dp)
+            .widthIn(max = screenWidth)) {
+            Column(
+                Modifier
+                    .verticalScroll(scroll)
+                    .padding(16.dp)
+                    .heightIn(max = maxHeight)
+                    .fillMaxWidth()
+            ) {
                 Text("Select date & time", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
-                DatePicker(state = datePickerState, modifier = Modifier.fillMaxWidth())
+                // Full-width DatePicker so all 7 weekday columns are visible. If device is extremely narrow, allow horizontal scroll.
+                val needsHorizontal = configuration.screenWidthDp < 340
+                if (needsHorizontal) {
+                    val hScroll = rememberScrollState()
+                    Row(Modifier.horizontalScroll(hScroll)) {
+                        DatePicker(state = datePickerState, modifier = Modifier.width(360.dp))
+                    }
+                } else {
+                    DatePicker(state = datePickerState, modifier = Modifier.fillMaxWidth())
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Time:", style = MaterialTheme.typography.bodyMedium)
