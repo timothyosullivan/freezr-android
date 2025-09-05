@@ -15,9 +15,24 @@ class ContainerRepository(private val dao: ContainerDao) {
         dao.insert(Container(name = name, quantity = quantity, reminderDays = reminderDays))
     suspend fun addFromScan(uuid: String, name: String = "Scanned", quantity: Int = 1): Long {
         val existing = dao.getByUuid(uuid)
-        if (existing != null) return existing.id
-        // Need to construct then replace uuid via copy
-        val base = Container(name = name, quantity = quantity)
+        // If existing is ACTIVE or UNUSED we just return its id (already claimed / present)
+        if (existing != null) {
+            return when (existing.status) {
+                Status.ACTIVE, Status.UNUSED -> existing.id
+                Status.USED, Status.DELETED -> {
+                    // For historical/soft-deleted or used entries, we create a fresh ACTIVE record keeping the uuid
+                    // so a rescanned physical label yields a new active container instead of surfacing history.
+                    val fresh = Container(
+                        name = name,
+                        quantity = quantity,
+                        uuid = uuid,
+                        status = Status.ACTIVE
+                    )
+                    dao.insert(fresh)
+                }
+            }
+        }
+        val base = Container(name = name, quantity = quantity, status = Status.ACTIVE)
         val withUuid = base.copy(uuid = uuid)
         return dao.insert(withUuid)
     }
@@ -115,8 +130,11 @@ class ContainerRepository(private val dao: ContainerDao) {
         val existing = dao.getById(id) ?: return -1
         val originalUuid = existing.uuid
         val now = System.currentTimeMillis()
-    // Mark old used (assign a new uuid so unique constraint allows new row with original uuid)
-    dao.update(existing.copy(status = Status.USED, dateUsed = now, uuid = UUID.randomUUID().toString(), updatedAt = now))
+        // Only convert the previous record to USED if it was ACTIVE (normal lifecycle). If it was DELETED, leave it as-is.
+        if (existing.status == Status.ACTIVE) {
+            // Mark old used (assign a new uuid so unique constraint allows new row with original uuid)
+            dao.update(existing.copy(status = Status.USED, dateUsed = now, uuid = UUID.randomUUID().toString(), updatedAt = now))
+        }
         // Insert new active record with original uuid
         return dao.insert(
             Container(
