@@ -859,14 +859,12 @@ private fun DateTimePickerDialog(
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMidnight)
     var hour by remember { mutableStateOf(initialHour) }
     var minute by remember { mutableStateOf(initialMinute) }
-    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
-        Surface(tonalElevation = 4.dp, shape = MaterialTheme.shapes.medium, modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)) {
-            Column(Modifier.widthIn(max = 480.dp).padding(16.dp)) {
-                Text("Select Date & Time", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                // Allow horizontal scroll if minimal width devices clip columns
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Select Date & Time") },
+        text = {
+            Column(Modifier.widthIn(min = 340.dp, max = 480.dp)) {
+                // Horizontal scroll safeguard for narrow devices to keep all weekday columns visible
                 val hScroll = rememberScrollState()
                 Box(Modifier.horizontalScroll(hScroll)) {
                     DatePicker(state = datePickerState, modifier = Modifier.widthIn(min = 360.dp))
@@ -888,21 +886,19 @@ private fun DateTimePickerDialog(
                             listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
                         }
                     }
-                    Spacer(Modifier.weight(1f))
-                    Column(horizontalAlignment = Alignment.End) {
-                        TextButton(onClick = onDismiss) { Text("Cancel") }
-                        TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
-                            val raw = datePickerState.selectedDateMillis ?: return@TextButton
-                            val cal = java.util.Calendar.getInstance().apply {
-                                timeInMillis = raw
-                                set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
-                            }
-                            onConfirm(cal.timeInMillis, hour, minute)
-                            onDismiss()
-                        }) { Text("OK") }
-                    }
                 }
             }
-        }
-    }
+        },
+        confirmButton = {
+            TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
+                val raw = datePickerState.selectedDateMillis ?: return@TextButton
+                val cal = java.util.Calendar.getInstance().apply {
+                    timeInMillis = raw
+                    set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+                }
+                onConfirm(cal.timeInMillis, hour, minute)
+            }) { Text("OK") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
