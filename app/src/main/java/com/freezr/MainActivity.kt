@@ -859,36 +859,8 @@ private fun DateTimePickerDialog(
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMidnight)
     var hour by remember { mutableStateOf(initialHour) }
     var minute by remember { mutableStateOf(initialMinute) }
-    AlertDialog(
+    DatePickerDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Select Date & Time") },
-        text = {
-            Column(Modifier.widthIn(min = 340.dp, max = 480.dp)) {
-                // Horizontal scroll safeguard for narrow devices to keep all weekday columns visible
-                val hScroll = rememberScrollState()
-                Box(Modifier.horizontalScroll(hScroll)) {
-                    DatePicker(state = datePickerState, modifier = Modifier.widthIn(min = 360.dp))
-                }
-                Spacer(Modifier.height(12.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    var hourExpanded by remember { mutableStateOf(false) }
-                    var minExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(expanded = hourExpanded, onExpandedChange = { hourExpanded = !hourExpanded }) {
-                        OutlinedTextField(value = "%02d".format(hour), onValueChange = {}, readOnly = true, label = { Text("Hour") }, modifier = Modifier.menuAnchor().width(90.dp))
-                        ExposedDropdownMenu(expanded = hourExpanded, onDismissRequest = { hourExpanded = false }) {
-                            (0..23).forEach { h -> DropdownMenuItem(text = { Text("%02d".format(h)) }, onClick = { hour = h; hourExpanded = false }) }
-                        }
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    ExposedDropdownMenuBox(expanded = minExpanded, onExpandedChange = { minExpanded = !minExpanded }) {
-                        OutlinedTextField(value = "%02d".format(minute), onValueChange = {}, readOnly = true, label = { Text("Min") }, modifier = Modifier.menuAnchor().width(90.dp))
-                        ExposedDropdownMenu(expanded = minExpanded, onDismissRequest = { minExpanded = false }) {
-                            listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
-                        }
-                    }
-                }
-            }
-        },
         confirmButton = {
             TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
                 val raw = datePickerState.selectedDateMillis ?: return@TextButton
@@ -900,5 +872,27 @@ private fun DateTimePickerDialog(
             }) { Text("OK") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+    ) {
+        Column(Modifier.padding(8.dp)) {
+            DatePicker(state = datePickerState, modifier = Modifier.fillMaxWidth())
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                var hourExpanded by remember { mutableStateOf(false) }
+                var minExpanded by remember { mutableStateOf(false) }
+                ExposedDropdownMenuBox(expanded = hourExpanded, onExpandedChange = { hourExpanded = !hourExpanded }) {
+                    OutlinedTextField(value = "%02d".format(hour), onValueChange = {}, readOnly = true, label = { Text("Hour") }, modifier = Modifier.menuAnchor().width(90.dp))
+                    ExposedDropdownMenu(expanded = hourExpanded, onDismissRequest = { hourExpanded = false }) {
+                        (0..23).forEach { h -> DropdownMenuItem(text = { Text("%02d".format(h)) }, onClick = { hour = h; hourExpanded = false }) }
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                ExposedDropdownMenuBox(expanded = minExpanded, onExpandedChange = { minExpanded = !minExpanded }) {
+                    OutlinedTextField(value = "%02d".format(minute), onValueChange = {}, readOnly = true, label = { Text("Min") }, modifier = Modifier.menuAnchor().width(90.dp))
+                    ExposedDropdownMenu(expanded = minExpanded, onDismissRequest = { minExpanded = false }) {
+                        listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
+                    }
+                }
+            }
+        }
+    }
 }
