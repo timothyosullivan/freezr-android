@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalCafe
 import androidx.compose.ui.res.painterResource
 import androidx.compose.material3.*
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -859,45 +861,54 @@ private fun DateTimePickerDialog(
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMidnight)
     var hour by remember { mutableStateOf(initialHour) }
     var minute by remember { mutableStateOf(initialMinute) }
-    DatePickerDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
-                val raw = datePickerState.selectedDateMillis ?: return@TextButton
-                val cal = java.util.Calendar.getInstance().apply {
-                    timeInMillis = raw
-                    set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
-                }
-                onConfirm(cal.timeInMillis, hour, minute)
-            }) { Text("OK") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    ) {
-        val scroll = rememberScrollState()
-        Column(
-            Modifier
-                .padding(8.dp)
+    val scroll = rememberScrollState()
+    val configuration = LocalConfiguration.current
+    val maxHeight = (configuration.screenHeightDp * 0.9f).dp
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(shape = MaterialTheme.shapes.medium, tonalElevation = 6.dp, modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp)
+            .widthIn(max = 420.dp)) {
+            Column(Modifier
                 .verticalScroll(scroll)
-                .fillMaxWidth()
-                .heightIn(max = 520.dp) // ensure content scrolls instead of clipping
-        ) {
-            DatePicker(state = datePickerState, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                var hourExpanded by remember { mutableStateOf(false) }
-                var minExpanded by remember { mutableStateOf(false) }
-                ExposedDropdownMenuBox(expanded = hourExpanded, onExpandedChange = { hourExpanded = !hourExpanded }) {
-                    OutlinedTextField(value = "%02d".format(hour), onValueChange = {}, readOnly = true, label = { Text("Hour") }, modifier = Modifier.menuAnchor().width(90.dp))
-                    ExposedDropdownMenu(expanded = hourExpanded, onDismissRequest = { hourExpanded = false }) {
-                        (0..23).forEach { h -> DropdownMenuItem(text = { Text("%02d".format(h)) }, onClick = { hour = h; hourExpanded = false }) }
+                .padding(16.dp)
+                .heightIn(max = maxHeight)) {
+                Text("Select date & time", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                DatePicker(state = datePickerState, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Time:", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(Modifier.width(12.dp))
+                    var hourExpanded by remember { mutableStateOf(false) }
+                    var minExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(expanded = hourExpanded, onExpandedChange = { hourExpanded = !hourExpanded }) {
+                        OutlinedTextField(value = "%02d".format(hour), onValueChange = {}, readOnly = true, label = { Text("Hour") }, modifier = Modifier.menuAnchor().width(92.dp))
+                        ExposedDropdownMenu(expanded = hourExpanded, onDismissRequest = { hourExpanded = false }) {
+                            (0..23).forEach { h -> DropdownMenuItem(text = { Text("%02d".format(h)) }, onClick = { hour = h; hourExpanded = false }) }
+                        }
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    ExposedDropdownMenuBox(expanded = minExpanded, onExpandedChange = { minExpanded = !minExpanded }) {
+                        OutlinedTextField(value = "%02d".format(minute), onValueChange = {}, readOnly = true, label = { Text("Min") }, modifier = Modifier.menuAnchor().width(92.dp))
+                        ExposedDropdownMenu(expanded = minExpanded, onDismissRequest = { minExpanded = false }) {
+                            listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
+                        }
                     }
                 }
-                Spacer(Modifier.width(12.dp))
-                ExposedDropdownMenuBox(expanded = minExpanded, onExpandedChange = { minExpanded = !minExpanded }) {
-                    OutlinedTextField(value = "%02d".format(minute), onValueChange = {}, readOnly = true, label = { Text("Min") }, modifier = Modifier.menuAnchor().width(90.dp))
-                    ExposedDropdownMenu(expanded = minExpanded, onDismissRequest = { minExpanded = false }) {
-                        listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
-                    }
+                Spacer(Modifier.height(16.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    TextButton(onClick = onDismiss) { Text("Cancel") }
+                    Spacer(Modifier.width(8.dp))
+                    val canConfirm = datePickerState.selectedDateMillis != null
+                    TextButton(enabled = canConfirm, onClick = {
+                        val raw = datePickerState.selectedDateMillis ?: return@TextButton
+                        val cal = java.util.Calendar.getInstance().apply {
+                            timeInMillis = raw
+                            set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+                        }
+                        onConfirm(cal.timeInMillis, hour, minute)
+                    }) { Text("Save") }
                 }
             }
         }
