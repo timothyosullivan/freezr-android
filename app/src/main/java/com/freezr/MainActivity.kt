@@ -24,6 +24,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.horizontalScroll
 import kotlin.OptIn
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -858,13 +859,19 @@ private fun DateTimePickerDialog(
     val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialDateMidnight)
     var hour by remember { mutableStateOf(initialHour) }
     var minute by remember { mutableStateOf(initialMinute) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Select Date & Time") },
-        text = {
-            Column {
-                DatePicker(state = datePickerState)
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Surface(tonalElevation = 4.dp, shape = MaterialTheme.shapes.medium, modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)) {
+            Column(Modifier.widthIn(max = 480.dp).padding(16.dp)) {
+                Text("Select Date & Time", style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
+                // Allow horizontal scroll if minimal width devices clip columns
+                val hScroll = rememberScrollState()
+                Box(Modifier.horizontalScroll(hScroll)) {
+                    DatePicker(state = datePickerState, modifier = Modifier.widthIn(min = 360.dp))
+                }
+                Spacer(Modifier.height(12.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     var hourExpanded by remember { mutableStateOf(false) }
                     var minExpanded by remember { mutableStateOf(false) }
@@ -874,26 +881,28 @@ private fun DateTimePickerDialog(
                             (0..23).forEach { h -> DropdownMenuItem(text = { Text("%02d".format(h)) }, onClick = { hour = h; hourExpanded = false }) }
                         }
                     }
-                    Spacer(Modifier.width(8.dp))
+                    Spacer(Modifier.width(12.dp))
                     ExposedDropdownMenuBox(expanded = minExpanded, onExpandedChange = { minExpanded = !minExpanded }) {
                         OutlinedTextField(value = "%02d".format(minute), onValueChange = {}, readOnly = true, label = { Text("Min") }, modifier = Modifier.menuAnchor().width(90.dp))
                         ExposedDropdownMenu(expanded = minExpanded, onDismissRequest = { minExpanded = false }) {
                             listOf(0,5,10,15,20,25,30,35,40,45,50,55).forEach { m -> DropdownMenuItem(text = { Text("%02d".format(m)) }, onClick = { minute = m; minExpanded = false }) }
                         }
                     }
+                    Spacer(Modifier.weight(1f))
+                    Column(horizontalAlignment = Alignment.End) {
+                        TextButton(onClick = onDismiss) { Text("Cancel") }
+                        TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
+                            val raw = datePickerState.selectedDateMillis ?: return@TextButton
+                            val cal = java.util.Calendar.getInstance().apply {
+                                timeInMillis = raw
+                                set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
+                            }
+                            onConfirm(cal.timeInMillis, hour, minute)
+                            onDismiss()
+                        }) { Text("OK") }
+                    }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(enabled = datePickerState.selectedDateMillis != null, onClick = {
-                val raw = datePickerState.selectedDateMillis ?: return@TextButton
-                val cal = java.util.Calendar.getInstance().apply {
-                    timeInMillis = raw
-                    set(java.util.Calendar.HOUR_OF_DAY,0); set(java.util.Calendar.MINUTE,0); set(java.util.Calendar.SECOND,0); set(java.util.Calendar.MILLISECOND,0)
-                }
-                onConfirm(cal.timeInMillis, hour, minute)
-            }) { Text("OK") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+    }
 }
