@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Before
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -27,6 +28,11 @@ class SettingsRepositoryTest {
             .build()
         dao = db.settingsDao()
         repo = com.freezr.data.repository.SettingsRepository(dao)
+    }
+
+    @After
+    fun teardown() {
+        if (::db.isInitialized) db.close()
     }
 
     @Test

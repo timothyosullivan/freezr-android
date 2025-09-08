@@ -5,7 +5,8 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <!-- Add padding so the freezer appears smaller and clearer inside adaptive mask -->
-    <group android:translateX="18" android:translateY="18" android:scaleX="0.66" android:scaleY="0.66">
+    <!-- Source paths are in a 24x24 grid. For scale S, center at ((108 - 24*S)/2). Using S=2 => translate 30. -->
+    <group android:translateX="30" android:translateY="30" android:scaleX="2" android:scaleY="2">
         <!-- Freezer body: white fill with dark outline for contrast on dark bg -->
         <path
             android:fillColor="#FFFFFF"
