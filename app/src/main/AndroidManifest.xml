@@ -7,9 +7,9 @@
     <application
         android:name=".FreezrApp"
         android:allowBackup="true"
-        android:label="Freezr"
-    android:icon="@drawable/ic_fridge"
-    android:roundIcon="@drawable/ic_fridge"
+    android:label="Freezr"
+    android:icon="@mipmap/ic_launcher"
+    android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
     android:theme="@style/Theme.Freezr.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
