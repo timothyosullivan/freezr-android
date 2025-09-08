@@ -6,9 +6,15 @@
     android:viewportHeight="108">
     <!-- Add padding so the freezer appears smaller and clearer inside adaptive mask -->
     <group android:translateX="18" android:translateY="18" android:scaleX="0.66" android:scaleY="0.66">
-        <path android:fillColor="#0A2A45" android:pathData="M6,2h12a2,2 0 0 1 2,2v16a2,2 0 0 1 -2,2H6a2,2 0 0 1 -2,-2V4a2,2 0 0 1 2,-2z"/>
-        <path android:strokeColor="#FFFFFF" android:strokeWidth="1.6" android:pathData="M5,8.5h14"/>
-        <path android:strokeColor="#FFFFFF" android:strokeLineCap="round" android:strokeWidth="2.4" android:pathData="M9,6.5v2"/>
-        <path android:strokeColor="#FFFFFF" android:strokeLineCap="round" android:strokeWidth="2.6" android:pathData="M9,12.5v4"/>
+        <!-- Freezer body: white fill with dark outline for contrast on dark bg -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:strokeColor="#0A2A45"
+            android:strokeWidth="1.6"
+            android:pathData="M6,2h12a2,2 0 0 1 2,2v16a2,2 0 0 1 -2,2H6a2,2 0 0 1 -2,-2V4a2,2 0 0 1 2,-2z"/>
+        <!-- Divider and handles now dark to show over white body -->
+        <path android:strokeColor="#0A2A45" android:strokeWidth="1.6" android:pathData="M5,8.5h14"/>
+        <path android:strokeColor="#0A2A45" android:strokeLineCap="round" android:strokeWidth="2.4" android:pathData="M9,6.5v2"/>
+        <path android:strokeColor="#0A2A45" android:strokeLineCap="round" android:strokeWidth="2.6" android:pathData="M9,12.5v4"/>
     </group>
 </vector>

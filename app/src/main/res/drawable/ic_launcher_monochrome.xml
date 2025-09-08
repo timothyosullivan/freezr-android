@@ -4,6 +4,9 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <path android:fillColor="#FFFFFF" android:fillAlpha="0.6" android:pathData="M28,32a6,6 0 0 1 6,-6h40a6,6 0 0 1 6,6v40a6,6 0 0 1 -6,6H34a6,6 0 0 1 -6,-6z" />
-    <path android:fillColor="#FFFFFF" android:pathData="M54,44l2.5,4.2 4.6,0.2 -3.1,3.5 1.2,4.4 -5.2,-2.3 -5.2,2.3 1.2,-4.4 -3.1,-3.5 4.6,-0.2z" />
+    <!-- Simple freezer outline for monochrome contexts -->
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="4" android:pathData="M34,28h40a6,6 0 0 1 6,6v40a6,6 0 0 1 -6,6H34a6,6 0 0 1 -6,-6V34a6,6 0 0 1 6,-6z" />
+    <path android:strokeColor="#FFFFFF" android:strokeWidth="3" android:pathData="M34,52h46" />
+    <path android:strokeColor="#FFFFFF" android:strokeLineCap="round" android:strokeWidth="3.5" android:pathData="M42,40v6" />
+    <path android:strokeColor="#FFFFFF" android:strokeLineCap="round" android:strokeWidth="4" android:pathData="M42,58v12" />
 </vector>
