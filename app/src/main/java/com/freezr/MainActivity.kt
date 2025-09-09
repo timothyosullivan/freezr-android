@@ -327,8 +327,11 @@ private fun ActiveDialog(
     val dayMs = 24L*60*60*1000L
     val soonMs = ui.expiringSoonDays * dayMs
     val criticalMs = ui.criticalDays * dayMs
-    val shelfLifeDays = container.shelfLifeDays ?: ui.defaultReminderDays
-    val shelfExpiry = container.createdAt + shelfLifeDays * dayMs
+    // Local shelf-life state so UI updates immediately after Save
+    var localShelfLifeDays by remember(container.id, container.shelfLifeDays, ui.defaultReminderDays) {
+        mutableStateOf(container.shelfLifeDays ?: ui.defaultReminderDays)
+    }
+    val shelfExpiry = container.createdAt + localShelfLifeDays * dayMs
     val reminderAt = container.reminderAt
     val remainingShelf = kotlin.math.ceil((shelfExpiry - now).toDouble()/dayMs.toDouble()).toLong()
     val shelfLabel = when {
@@ -364,7 +367,13 @@ private fun ActiveDialog(
             Spacer(Modifier.height(4.dp)); Text("Scanned: ${formatFullDate(container.createdAt)}", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(value = shelfInput, onValueChange = { if (it.length<=3) shelfInput = it.filter(Char::isDigit) }, label = { Text("Shelf life days") }, singleLine = true)
-            TextButton(enabled = shelfInput.toIntOrNull()!=null, onClick = { shelfInput.toIntOrNull()?.let(onShelfLife) }) { Text("Save Shelf Life") }
+            TextButton(enabled = shelfInput.toIntOrNull()!=null, onClick = {
+                shelfInput.toIntOrNull()?.let { days ->
+                    // Optimistically update local UI state so labels refresh immediately
+                    localShelfLifeDays = days
+                    onShelfLife(days)
+                }
+            }) { Text("Save Shelf Life") }
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = { showDateTime = true }) { Text(selectedDateMidnight?.let { formatShortDate(it) + " %02d:%02d".format(hour, minute) } ?: "Pick reminder date & time") }
@@ -560,11 +569,13 @@ private fun ContainerList(items: List<Container>, expiringSoonDays: Int, critica
                         val dayMs = 24L*60*60*1000L
                         val durationDays = c.shelfLifeDays ?: defaultDays
                         val targetAt = c.createdAt + durationDays * dayMs
-                        val remaining = (targetAt - now) / dayMs
-                        val remLabel = when {
-                            remaining < 0 -> "Expired ${-remaining}d ago"
-                            remaining == 0L -> "Expires today"
-                            else -> "${remaining}d remaining"
+                        val diff = targetAt - now
+                        val remLabel = if (diff < 0) {
+                            val pastDays = (kotlin.math.abs(diff) / dayMs) // floor past
+                            if (pastDays == 0L) "Expired today" else "Expired ${pastDays}d ago"
+                        } else {
+                            val futureDays = kotlin.math.ceil(diff.toDouble() / dayMs.toDouble()).toLong() // ceil future
+                            if (futureDays == 0L) "Expires today" else "${futureDays}d remaining"
                         }
                         Text(remLabel, style = MaterialTheme.typography.bodySmall)
                         c.reminderAt?.let { ra ->
@@ -804,11 +815,13 @@ private fun LabelPreviewDialog(container: Container, defaultShelfLifeDays: Int, 
     val shelfDays = container.shelfLifeDays ?: defaultShelfLifeDays
     val dayMs = 24L*60*60*1000L
     val expiry = container.createdAt + shelfDays * dayMs
-    val remaining = (expiry - System.currentTimeMillis()) / dayMs
-    val remLabel = when {
-        remaining < 0 -> "expired ${-remaining}d ago"
-        remaining == 0L -> "expires today"
-        else -> "${remaining}d remaining"
+    val diff = expiry - System.currentTimeMillis()
+    val remLabel = if (diff < 0) {
+        val pastDays = (kotlin.math.abs(diff) / dayMs)
+        if (pastDays == 0L) "expired today" else "expired ${pastDays}d ago"
+    } else {
+        val futureDays = kotlin.math.ceil(diff.toDouble() / dayMs.toDouble()).toLong()
+        if (futureDays == 0L) "expires today" else "${futureDays}d remaining"
     }
     val shelfLabel = "Shelf life: ${shelfDays}d (${remLabel})"
     val reminderLabel = container.reminderAt?.let { at ->
