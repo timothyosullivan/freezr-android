@@ -33,10 +33,21 @@ android {
     }
     composeOptions { kotlinCompilerExtensionVersion = "1.5.8" }
 
+    signingConfigs {
+        create("release") {
+            // Uses secrets from gradle.properties or ~/.gradle/gradle.properties
+            storeFile = file(project.property("FREEZR_STORE_FILE") as String)
+            storePassword = project.property("FREEZR_STORE_PASSWORD") as String
+            keyAlias = project.property("FREEZR_KEY_ALIAS") as String
+            keyPassword = project.property("FREEZR_KEY_PASSWORD") as String
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
+            signingConfig = signingConfigs.getByName("release")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
