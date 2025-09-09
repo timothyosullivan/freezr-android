@@ -358,7 +358,7 @@ private fun ActiveDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(14.dp).background(color, CircleShape))
                 Spacer(Modifier.width(8.dp))
-                Text("Alert: $alertLabel", style = MaterialTheme.typography.labelMedium)
+                Text("Expires: $alertLabel", style = MaterialTheme.typography.labelMedium)
             }
             Spacer(Modifier.height(4.dp)); Text("Shelf life: $shelfLabel", style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(4.dp)); Text("Scanned: ${formatFullDate(container.createdAt)}", style = MaterialTheme.typography.bodySmall)
@@ -601,9 +601,14 @@ private fun ContainerList(items: List<Container>, expiringSoonDays: Int, critica
 }
 
 private fun rel(diffMillis: Long): String {
-    val absMs = abs(diffMillis)
-    val days = absMs / (24L*60*60*1000)
-    return if (diffMillis < 0) "${days}d overdue" else if (days==0L) "<1d" else "in ${days}d"
+    val dayMs = 24L*60*60*1000
+    return if (diffMillis < 0) {
+        val days = (abs(diffMillis) / dayMs) // floor past days
+        if (days == 0L) "overdue today" else "${days}d overdue"
+    } else {
+        val days = kotlin.math.ceil(diffMillis.toDouble() / dayMs.toDouble()).toLong() // ceil future days
+        if (days <= 0L) "<1d" else "in ${days}d"
+    }
 }
 
 private fun formatFullDate(epochMillis: Long): String {
