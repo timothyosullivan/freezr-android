@@ -35,11 +35,19 @@ android {
 
     signingConfigs {
         create("release") {
-            // Uses secrets from gradle.properties or ~/.gradle/gradle.properties
-            storeFile = file(project.property("FREEZR_STORE_FILE") as String)
-            storePassword = project.property("FREEZR_STORE_PASSWORD") as String
-            keyAlias = project.property("FREEZR_KEY_ALIAS") as String
-            keyPassword = project.property("FREEZR_KEY_PASSWORD") as String
+            // Uses secrets from gradle.properties, ~/.gradle/gradle.properties, or env vars as fallback
+            val storePath = (project.findProperty("FREEZR_STORE_FILE") as String?) ?: System.getenv("FREEZR_STORE_FILE")
+            val storePass = (project.findProperty("FREEZR_STORE_PASSWORD") as String?) ?: System.getenv("FREEZR_STORE_PASSWORD")
+            val alias = (project.findProperty("FREEZR_KEY_ALIAS") as String?) ?: System.getenv("FREEZR_KEY_ALIAS")
+            val keyPass = (project.findProperty("FREEZR_KEY_PASSWORD") as String?) ?: System.getenv("FREEZR_KEY_PASSWORD")
+            if (storePath != null && storePass != null && alias != null && keyPass != null) {
+                storeFile = file(storePath)
+                storePassword = storePass
+                keyAlias = alias
+                keyPassword = keyPass
+            } else {
+                println("[signing] FREEZR_* properties not found; release will not be signed in this environment.")
+            }
         }
     }
 
@@ -47,7 +55,12 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            // attach signing only if configured
+            val hasSigning = (project.findProperty("FREEZR_STORE_FILE") != null
+                    || System.getenv("FREEZR_STORE_FILE") != null)
+            if (hasSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
         debug {
