@@ -1,0 +1,29 @@
+Beat freezer burn and food waste. Freezr makes it effortless to label, track, and find what you’ve stored—so you use it on time and save money.
+
+Why you’ll love Freezr
+• Scan QR codes fast: On‑device scanning—no login, no uploads.
+• Smart reminders: Get notified before items expire (exact alarms supported).
+• Clear labels: Generate printable PDFs or share to print—no special printer needed.
+• Powerful search & filters: Find by name, date, status, or QR.
+• Simple & fast: Add items in seconds with sane defaults.
+• 100% private: No accounts, no ads, no analytics. Works fully offline.
+
+What you can do
+• Add items with name, date, and notes
+• Organize by status (Active / Used) and sort how you like
+• Scan your own QR labels
+• Export labels to PDF and print anywhere
+• Set reminder timing that fits your routine
+
+Designed for home cooks, meal preppers, and anyone with a busy freezer or fridge.
+
+Privacy by design
+Freezr never sends your data to servers. Everything stays on your device. Camera frames and scans are processed locally.
+
+Made with modern Android
+Built with Jetpack Compose, Room, WorkManager, Hilt, and ML Kit for a smooth, reliable experience.
+
+Tip the maker
+If Freezr helps you save, consider a tip via the link in the app.
+
+Note: Permissions are only used for barcode scanning and reminders (notifications/exact alarms).

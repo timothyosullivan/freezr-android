@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+  <defs>
+    <!-- Solid dark background to match app icon master -->
+    <radialGradient id="ig" cx="512" cy="250" r="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.06"/>
+      <stop offset="75%" stop-color="#FFFFFF" stop-opacity="0.03"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1024" height="500" fill="#0A2A45"/>
+  <rect width="1024" height="500" fill="url(#ig)"/>
+  <!-- Freezr freezer icon (matching app icon styling) -->
+  <!-- 24x24 source scaled by 12 => 288px; left-aligned -->
+  <g transform="translate(90,106) scale(12)" opacity="0.92">
+    <path d="M6,2h12a2,2 0 0 1 2,2v16a2,2 0 0 1 -2,2H6a2,2 0 0 1 -2,-2V4a2,2 0 0 1 2,-2z"
+          fill="#FFFFFF" stroke="none"/>
+    <!-- Divider line (dark for contrast), slightly softened -->
+    <path d="M5,8.5h14" fill="none" stroke="#0A2A45" stroke-width="1.6" stroke-opacity="0.25"/>
+    <path d="M9,6.5v2" fill="none" stroke="#0A2A45" stroke-linecap="round" stroke-width="2.4"/>
+    <path d="M9,12.5v4" fill="none" stroke="#0A2A45" stroke-linecap="round" stroke-width="2.6"/>
+  </g>
+  <!-- Headline and value prop -->
+  <g font-family="Inter,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" fill="#fff">
+    <!-- Shorter copy and smaller sizes to avoid truncation at 1024px width -->
+    <text x="460" y="195" font-size="46" font-weight="800">Track. Find. Use on time.</text>
+    <text x="460" y="248" font-size="24" opacity="0.95">Scan QR codes. Get smart reminders. Waste less.</text>
+    <text x="460" y="292" font-size="20" opacity="0.85">Offline • Private • Ad‑free</text>
+  </g>
+</svg>
